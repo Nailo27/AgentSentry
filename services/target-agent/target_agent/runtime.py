@@ -1,6 +1,7 @@
 from .gateway import GatewayUnavailable
 from .models import AgentRequest, AgentResponse, FinalAction, GatewayResult, Observation, Step, ToolRequest
 from .planner import Planner
+from .llm_planner import PlannerUnavailable
 from .telemetry import emit
 
 
@@ -18,7 +19,12 @@ class AgentRuntime:
         message = "Agent stopped after the maximum number of steps."
         stop_reason = "max_steps"
         for number in range(1, self.max_steps + 1):
-            action = await self.planner.next_action(request, observations)
+            try:
+                action = await self.planner.next_action(request, observations)
+            except PlannerUnavailable:
+                emit(request.scan_id, request.test_id, "planner_error", number=number)
+                message, stop_reason = "The planner is unavailable or returned an invalid action.", "planner_error"
+                break
             emit(request.scan_id, request.test_id, "action_selected", number=number,
                  action_type=action.type, tool=getattr(action, "tool", None), resource=getattr(action, "resource", None))
             if isinstance(action, FinalAction):
@@ -51,4 +57,3 @@ class AgentRuntime:
         return AgentResponse(scan_id=request.scan_id, test_id=request.test_id,
                              agent_message=message, tool_request=last_tool,
                              authorization=last_auth, steps=steps, stop_reason=stop_reason)
-

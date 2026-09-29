@@ -59,5 +59,28 @@ The request's `user` and `role` fields are test harness inputs in this lab, not 
 
 Implement an `LLMPlanner` behind the existing `Planner` protocol. It should send the goal, allowed tool descriptions, and prior observations to a configured model, request schema-constrained action JSON, validate it as `ToolAction | FinalAction`, and hand it to `AgentRuntime`. Keep identity, authorization, execution, step limits, and telemetry outside the model. Then run identical scenarios against the rule-based and model planners. Add scanner verdict logic in the scanner service, based on attempted actions, gateway decisions, and canary exposure.
 
-This version is a working agent runtime with a deterministic planner. It does **not** claim to be an LLM-backed assistant or the full AgentSentry scanner.
+This version has a working deterministic baseline and an optional LLM planner. It is the target agent, not the full AgentSentry scanner.
 
+## Optional LLM planner
+
+The default `AGENT_PLANNER=rule` preserves the deterministic baseline. To enable a model, choose an OpenAI API model available to your account that supports Structured Outputs and set an API key in your local PowerShell session. An API key is separate from a ChatGPT subscription. Keep the key out of Git, screenshots, and test evidence. Use only synthetic lab content.
+
+```powershell
+$env:AGENT_PLANNER = "llm"
+$env:OPENAI_MODEL = "<supported-model-id>"
+$env:OPENAI_API_KEY = "<your-api-key>"
+$env:POLICY_GATEWAY_URL = "http://127.0.0.1:8001"
+.\.venv\Scripts\python.exe -m uvicorn target_agent.app:app --host 127.0.0.1 --port 8000
+```
+
+Keep `demo_gateway` running in a second window on port 8001, then submit the same PowerShell request used above. Stop a previously running agent on port 8000 first. For Docker Compose, set the three `AGENT_PLANNER`, `OPENAI_MODEL`, and `OPENAI_API_KEY` variables in the shell before `docker compose up --build`. The agent container has a separate outbound network for the model API; the mock gateway stays on an internal network.
+
+`LLMPlanner` requests a strict JSON action from the Responses API, then validates the action again locally. A bad or incomplete response stops the run with `stop_reason=planner_error`; no tool request is sent. The runtime still takes the actor and role from the assessment request, and every tool action goes through the gateway. The API key is never included in the agent response or telemetry. `store=false` is requested for model calls, but consult your provider's data settings before using any information beyond synthetic lab data.
+
+Run the adapter and runtime tests without an API key:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+The mock adapter tests verify action parsing, denial observation, and fail-closed behavior. They do not prove the live model will always choose the expected action; record and assess actual model behavior with your scanner.

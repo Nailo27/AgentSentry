@@ -65,5 +65,4 @@ class AgentResponse(BaseModel):
     tool_request: ToolRequest | None = None
     authorization: GatewayResult | None = None
     steps: list[Step]
-    stop_reason: Literal["final", "max_steps", "gateway_error"]
-
+    stop_reason: Literal["final", "max_steps", "gateway_error", "planner_error"]

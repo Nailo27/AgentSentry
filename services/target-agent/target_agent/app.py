@@ -1,13 +1,25 @@
 import logging
+import os
 from fastapi import FastAPI
 from .gateway import HttpGateway
 from .models import AgentRequest, AgentResponse
 from .planner import RuleBasedPlanner
+from .llm_planner import LLMPlanner, OpenAIResponsesAdapter
 from .runtime import AgentRuntime
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 app = FastAPI(title="AgentSentry Target Agent")
-runtime = AgentRuntime(RuleBasedPlanner(), HttpGateway())
+
+def make_planner():
+    mode = os.getenv("AGENT_PLANNER", "rule").lower()
+    if mode == "rule":
+        return RuleBasedPlanner()
+    if mode == "llm":
+        return LLMPlanner(OpenAIResponsesAdapter())
+    raise ValueError("AGENT_PLANNER must be 'rule' or 'llm'")
+
+
+runtime = AgentRuntime(make_planner(), HttpGateway())
 
 
 @app.get("/health")
@@ -18,4 +30,3 @@ def health():
 @app.post("/agent/message", response_model=AgentResponse)
 async def message(request: AgentRequest):
     return await runtime.run(request)
-

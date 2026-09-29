@@ -4,8 +4,11 @@ services:
     ports: ["127.0.0.1:8000:8000"]
     environment:
       POLICY_GATEWAY_URL: http://gateway:8001
+      AGENT_PLANNER: ${AGENT_PLANNER:-rule}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on: [gateway]
-    networks: [agent_net]
+    networks: [agent_net, model_net]
   gateway:
     build: .
     command: ["uvicorn", "demo_gateway:app", "--host", "0.0.0.0", "--port", "8001"]
@@ -13,4 +16,4 @@ services:
 networks:
   agent_net:
     internal: true
-
+  model_net: {}
