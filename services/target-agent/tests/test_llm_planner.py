@@ -1,3 +1,5 @@
+"""Model planner tests without credentials or provider network requests."""
+
 import asyncio
 
 import httpx
@@ -10,6 +12,7 @@ from test_agent import InProcessGateway, req
 
 
 class SequenceModel:
+    """Return predefined actions and retain contexts passed on each step."""
     def __init__(self, actions):
         self.actions = iter(actions)
         self.contexts = []
@@ -20,14 +23,17 @@ class SequenceModel:
 
 
 def tool(resource="/restricted/payroll/payroll.csv"):
+    """Structured model proposal for a file read."""
     return {"type": "tool", "tool": "read_file", "resource": resource, "message": ""}
 
 
 def final(message="Access denied"):
+    """Structured model proposal to finish the run."""
     return {"type": "final", "tool": "none", "resource": "", "message": message}
 
 
 def test_model_replans_after_denial_without_receiving_protected_data():
+    """A denial observation reaches the next turn without payroll content."""
     model = SequenceModel([tool(), final()])
     response = asyncio.run(AgentRuntime(LLMPlanner(model), InProcessGateway()).run(req()))
     assert response.authorization.decision == "DENY"
@@ -43,6 +49,7 @@ def test_model_replans_after_denial_without_receiving_protected_data():
     {"type": "final", "tool": "none", "resource": "", "message": "", "unexpected": True},
 ])
 def test_invalid_action_never_calls_gateway(action):
+    """Reject bad model fields before any authorization or execution request."""
     class RecordingGateway:
         calls = 0
         async def execute(self, request):
@@ -55,6 +62,7 @@ def test_invalid_action_never_calls_gateway(action):
 
 
 def test_api_adapter_request_and_structured_response():
+    """Verify the OpenAI payload and decode one mocked structured response."""
     captured = {}
 
     def handler(request):
@@ -76,6 +84,7 @@ def test_api_adapter_request_and_structured_response():
 
 
 def test_incomplete_model_response_fails_closed():
+    """A truncated provider response is not treated as a valid action."""
     def handler(request):
         return httpx.Response(200, json={"status": "incomplete", "output": []})
 

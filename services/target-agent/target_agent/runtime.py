@@ -1,3 +1,5 @@
+"""Bounded agent loop that turns actions and tool outcomes into an auditable run."""
+
 from .gateway import GatewayUnavailable
 from .models import AgentRequest, AgentResponse, FinalAction, GatewayResult, Observation, Step, ToolRequest
 from .planner import Planner
@@ -6,12 +8,16 @@ from .telemetry import emit
 
 
 class AgentRuntime:
+    """Own the control loop; planners propose actions and the gateway enforces policy."""
     def __init__(self, planner: Planner, gateway, max_steps: int = 4):
+        # The step budget also bounds repeated tool requests after denials.
         if max_steps < 1:
             raise ValueError("max_steps must be positive")
         self.planner, self.gateway, self.max_steps = planner, gateway, max_steps
 
     async def run(self, request: AgentRequest) -> AgentResponse:
+        """Plan, mediate a tool request, observe, and replan until final or stopped."""
+        # State is local to this request, so one scan cannot inherit another's observations.
         observations: list[Observation] = []
         steps: list[Step] = []
         last_tool: ToolRequest | None = None
@@ -22,12 +28,14 @@ class AgentRuntime:
             try:
                 action = await self.planner.next_action(request, observations)
             except PlannerUnavailable:
+                # Invalid model output never reaches a protected tool.
                 emit(request.scan_id, request.test_id, "planner_error", number=number)
                 message, stop_reason = "The planner is unavailable or returned an invalid action.", "planner_error"
                 break
             emit(request.scan_id, request.test_id, "action_selected", number=number,
                  action_type=action.type, tool=getattr(action, "tool", None), resource=getattr(action, "resource", None))
             if isinstance(action, FinalAction):
+                # Final messages end the loop without contacting the gateway.
                 steps.append(Step(number=number, action=action))
                 message, stop_reason = action.message, "final"
                 break
@@ -38,6 +46,7 @@ class AgentRuntime:
             try:
                 authorization = await self.gateway.execute(tool)
             except GatewayUnavailable:
+                # An unavailable gateway cannot be interpreted as permission.
                 observation = Observation(kind="error", decision="ERROR", reason="Gateway unavailable")
                 steps.append(Step(number=number, action=action, observation=observation))
                 emit(request.scan_id, request.test_id, "gateway_error", number=number)
@@ -50,6 +59,7 @@ class AgentRuntime:
                 last_auth = authorization
             observation = Observation(kind="gateway", decision=authorization.decision,
                                       reason=authorization.reason, data=authorization.data)
+            # Record what happened, then show the observation to the planner on the next turn.
             steps.append(Step(number=number, action=action, authorization=authorization, observation=observation))
             observations.append(observation)
             emit(request.scan_id, request.test_id, "gateway_decision", number=number,

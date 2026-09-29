@@ -1,9 +1,12 @@
 services:
   agent:
+    # Expose only the agent API on host loopback for local lab requests.
     build: .
     ports: ["127.0.0.1:8000:8000"]
     environment:
+      # The agent reaches protected resources only through this gateway URL.
       POLICY_GATEWAY_URL: http://gateway:8001
+      # Rule mode needs no provider key; LLM mode selects one adapter.
       AGENT_PLANNER: ${AGENT_PLANNER:-rule}
       AGENT_PROVIDER: ${AGENT_PROVIDER:-openai}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
@@ -15,10 +18,12 @@ services:
     depends_on: [gateway]
     networks: [agent_net, model_net]
   gateway:
+    # The synthetic policy service has no external network or published port.
     build: .
     command: ["uvicorn", "demo_gateway:app", "--host", "0.0.0.0", "--port", "8001"]
     networks: [agent_net]
 networks:
   agent_net:
     internal: true
+  # Optional cloud model calls need outbound access from the agent container.
   model_net: {}

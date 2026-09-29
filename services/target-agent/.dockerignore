@@ -1,6 +1,6 @@
+# Keep local tooling and test artifacts out of container build context.
 .git
 .venv
 __pycache__
 .pytest_cache
 tests
-

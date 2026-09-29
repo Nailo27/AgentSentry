@@ -1,3 +1,5 @@
+"""Anthropic/Ollama wire-contract tests with mock HTTP and a real lab gateway."""
+
 import asyncio
 import json
 
@@ -12,11 +14,13 @@ from test_agent import InProcessGateway, req
 
 
 def tool():
+    """Return one provider-neutral structured tool proposal."""
     return {"type": "tool", "tool": "read_file",
             "resource": "/restricted/payroll/payroll.csv", "message": ""}
 
 
 def response_for(provider, action):
+    """Wrap the same action in each provider's distinct response envelope."""
     content = json.dumps(action)
     if provider == "anthropic":
         return {"type": "message", "stop_reason": "end_turn",
@@ -33,6 +37,7 @@ def response_for(provider, action):
     ("ollama", OllamaAdapter, "http://127.0.0.1:11434/api/chat"),
 ])
 def test_provider_contract_and_gateway_denial(provider, adapter_class, endpoint):
+    """Provider output reaches the shared runtime and employee policy still denies."""
     calls = []
 
     def handler(request):
@@ -66,6 +71,7 @@ def test_provider_contract_and_gateway_denial(provider, adapter_class, endpoint)
     ("anthropic", AnthropicAdapter), ("ollama", OllamaAdapter)
 ])
 def test_bad_provider_response_stops_before_tool(provider, adapter_class):
+    """An invalid tool name cannot cause a gateway call."""
     def handler(request):
         return httpx.Response(200, json=response_for(provider, {"type": "tool", "tool": "none",
                                                           "resource": "/restricted/payroll/payroll.csv", "message": ""}))
@@ -86,6 +92,7 @@ def test_bad_provider_response_stops_before_tool(provider, adapter_class):
     ("ollama", OllamaAdapter, {"done": False, "message": {"content": "{}"}}),
 ])
 def test_incomplete_provider_response(provider, adapter_class, incomplete):
+    """Do not parse truncated responses as actions."""
     def handler(request):
         return httpx.Response(200, json=incomplete)
 
@@ -99,6 +106,7 @@ def test_incomplete_provider_response(provider, adapter_class, incomplete):
 
 
 def test_provider_selection(monkeypatch):
+    """Configuration selects the intended adapter and rejects unknown providers."""
     monkeypatch.setenv("AGENT_PLANNER", "llm")
     monkeypatch.setenv("AGENT_PROVIDER", "ollama")
     monkeypatch.setenv("OLLAMA_MODEL", "local-test")
