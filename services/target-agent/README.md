@@ -57,25 +57,54 @@ The request's `user` and `role` fields are test harness inputs in this lab, not 
 
 ## Next implementation milestone
 
-Implement an `LLMPlanner` behind the existing `Planner` protocol. It should send the goal, allowed tool descriptions, and prior observations to a configured model, request schema-constrained action JSON, validate it as `ToolAction | FinalAction`, and hand it to `AgentRuntime`. Keep identity, authorization, execution, step limits, and telemetry outside the model. Then run identical scenarios against the rule-based and model planners. Add scanner verdict logic in the scanner service, based on attempted actions, gateway decisions, and canary exposure.
+Build scanner scenarios and verdict logic based on attempted actions, gateway decisions, and canary exposure. Run the same scenarios against the rule-based and selected model planners. Keep identity, authorization, execution, step limits, and telemetry outside the model.
 
 This version has a working deterministic baseline and an optional LLM planner. It is the target agent, not the full AgentSentry scanner.
 
 ## Optional LLM planner
 
-The default `AGENT_PLANNER=rule` preserves the deterministic baseline. To enable a model, choose an OpenAI API model available to your account that supports Structured Outputs and set an API key in your local PowerShell session. An API key is separate from a ChatGPT subscription. Keep the key out of Git, screenshots, and test evidence. Use only synthetic lab content.
+The default `AGENT_PLANNER=rule` preserves the deterministic baseline. Set `AGENT_PLANNER=llm` and select `AGENT_PROVIDER=openai`, `anthropic`, or `ollama`. The provider adapter is the only component that changes; all three use the same `LLMPlanner` action validation, runtime, and gateway. Use only synthetic lab content and keep API keys out of Git, screenshots, and test evidence. Cloud API access is separate from consumer chat subscriptions.
+
+| Provider | Required environment variables | Transport |
+|---|---|---|
+| OpenAI (default for `llm`) | `OPENAI_MODEL`, `OPENAI_API_KEY` | Responses API with strict JSON schema |
+| Anthropic | `ANTHROPIC_MODEL`, `ANTHROPIC_API_KEY` | Messages API with `output_config.format` JSON schema |
+| Local Ollama | `OLLAMA_MODEL`; optional `OLLAMA_BASE_URL` | Native `/api/chat` with JSON schema in `format` |
+
+Choose a model available to your account or installed locally that supports the requested structured output. The service fails at startup when a required model or cloud key is missing.
+
+Example for OpenAI:
 
 ```powershell
 $env:AGENT_PLANNER = "llm"
+$env:AGENT_PROVIDER = "openai"
 $env:OPENAI_MODEL = "<supported-model-id>"
 $env:OPENAI_API_KEY = "<your-api-key>"
 $env:POLICY_GATEWAY_URL = "http://127.0.0.1:8001"
 .\.venv\Scripts\python.exe -m uvicorn target_agent.app:app --host 127.0.0.1 --port 8000
 ```
 
-Keep `demo_gateway` running in a second window on port 8001, then submit the same PowerShell request used above. Stop a previously running agent on port 8000 first. For Docker Compose, set the three `AGENT_PLANNER`, `OPENAI_MODEL`, and `OPENAI_API_KEY` variables in the shell before `docker compose up --build`. The agent container has a separate outbound network for the model API; the mock gateway stays on an internal network.
+For Anthropic, use the same start command after setting:
 
-`LLMPlanner` requests a strict JSON action from the Responses API, then validates the action again locally. A bad or incomplete response stops the run with `stop_reason=planner_error`; no tool request is sent. The runtime still takes the actor and role from the assessment request, and every tool action goes through the gateway. The API key is never included in the agent response or telemetry. `store=false` is requested for model calls, but consult your provider's data settings before using any information beyond synthetic lab data.
+```powershell
+$env:AGENT_PLANNER = "llm"
+$env:AGENT_PROVIDER = "anthropic"
+$env:ANTHROPIC_MODEL = "<supported-Claude-model-id>"
+$env:ANTHROPIC_API_KEY = "<your-Anthropic-api-key>"
+```
+
+For a local Ollama instance, first install Ollama, pull a suitable model, and confirm it appears in `ollama list`. Then set:
+
+```powershell
+$env:AGENT_PLANNER = "llm"
+$env:AGENT_PROVIDER = "ollama"
+$env:OLLAMA_MODEL = "<installed-model-id>"
+$env:OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+```
+
+Keep `demo_gateway` running in a second window on port 8001, then submit the same PowerShell request used above. Stop a previously running agent on port 8000 first. For Docker Compose, set the relevant provider variables in the shell before `docker compose up --build`. On Docker Desktop, the Compose default for Ollama is `http://host.docker.internal:11434`; verify that the container can reach your local Ollama service. Native Python execution is the simplest Ollama setup. The mock gateway remains on an internal network.
+
+`LLMPlanner` requests a schema-constrained JSON action from the selected provider, then validates it again locally. A bad or incomplete response stops the run with `stop_reason=planner_error`; no tool request is sent. The runtime still takes the actor and role from the assessment request, and every tool action goes through the gateway. Cloud API keys are never included in agent responses or telemetry. `store=false` is requested for OpenAI model calls; consult each provider's data settings before using any information beyond synthetic lab data.
 
 Run the adapter and runtime tests without an API key:
 
@@ -83,4 +112,4 @@ Run the adapter and runtime tests without an API key:
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-The mock adapter tests verify action parsing, denial observation, and fail-closed behavior. They do not prove the live model will always choose the expected action; record and assess actual model behavior with your scanner.
+The mock adapter tests verify each provider's request/response parsing, denial observation, and fail-closed behavior. They do not prove a live model will always choose the expected action. Record provider, model identifier, scenario, observed actions, and gateway decisions when comparing providers.

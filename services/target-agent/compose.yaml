@@ -5,8 +5,13 @@ services:
     environment:
       POLICY_GATEWAY_URL: http://gateway:8001
       AGENT_PLANNER: ${AGENT_PLANNER:-rule}
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-openai}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     depends_on: [gateway]
     networks: [agent_net, model_net]
   gateway:
