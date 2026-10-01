@@ -27,7 +27,6 @@ FILES = {
 }
 
 #Fulfills my Deterministic Gateway responsibility.
-#The following executions fulfill my Decision reason / policy ID responsibility
 @app.post("/execute", response_model=GatewayResult)
 def execute(request: ToolRequest):
     """Evaluate a proposed file read and return an ALLOW or DENY decision."""
@@ -62,7 +61,8 @@ def execute(request: ToolRequest):
             policy_id="POL-FILE-004",
             reason="Role lacks payroll access",
         )
-
+        
+    #Fulfills my Decision reason / policy ID responsibility
     return GatewayResult(
         decision="ALLOW",
         policy_id="POL-FILE-001",
