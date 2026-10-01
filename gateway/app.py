@@ -4,14 +4,17 @@ This gateway uses only synthetic resources and is intended for local
 integration/testing. It does not perform real authentication.
 """
 
+#FastAPI is a python framework for building APIs, 
 from fastapi import FastAPI
 
 #Portions using this code will not be functional until merged back into the main branch with target agent components 
 from target_agent.models import GatewayResult, ToolRequest
 
+#Creates the actual API application
 app = FastAPI(title="AgentSentry Authorization Gateway")
 
 # Synthetic resources used only for Sprint 1 testing.
+#Fulfills my protected synthetic payroll resource responsibility
 FILES = {
     "/public/handbook.txt": (
         "Welcome to the synthetic employee handbook."
@@ -23,7 +26,8 @@ FILES = {
     ),
 }
 
-
+#Fulfills my Deterministic Gateway responsibility.
+#The following executions fulfill my Decision reason / policy ID responsibility
 @app.post("/execute", response_model=GatewayResult)
 def execute(request: ToolRequest):
     """Evaluate a proposed file read and return an ALLOW or DENY decision."""
