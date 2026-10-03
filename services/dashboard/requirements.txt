@@ -1,0 +1,15 @@
+# Dashboard service dependencies (UI-01).
+#
+# Deliberately short. The dashboard's only job is to call the agent's HTTP API,
+# compare the result against a YAML policy file, and render it. Anything beyond
+# that belongs in the scanner service in Sprint 2.
+#
+# Versions are pinned to a minor range so a rebuild months from now produces
+# the same lab. The project plan names Streamlit as the MVP dashboard
+# technology; httpx matches the client the target agent already uses, so the
+# two services share one HTTP stack rather than mixing httpx and requests.
+
+streamlit>=1.40,<2
+httpx>=0.27,<1
+pandas>=2.2,<3
+PyYAML>=6,<7
