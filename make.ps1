@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     AgentSentry lab task runner for Windows PowerShell (INF-02).
 
@@ -166,9 +166,22 @@ switch ($Target) {
 
     'test' {
         $testPath = Join-Path $PSScriptRoot 'services\target-agent\tests'
-        Invoke-Compose @('run', '--rm', '--no-deps', '--entrypoint', '',
-                         '-v', "${testPath}:/app/tests:ro", 'agent',
-                         'sh', '-c', 'pip install --quiet pytest && python -m pytest -q /app/tests')
+
+        # The image runs as an unprivileged user. Install pytest in /tmp,
+        # where that user can write, rather than changing system packages.
+        $testCommand = 'python -m pip install --quiet --no-cache-dir --target /tmp/agentsentry-test-deps pytest && python -m pytest -q -p no:cacheprovider /app/tests'
+
+        # Avoid --entrypoint followed by an empty string: Windows PowerShell
+        # 5.1 can drop empty native arguments and shift Docker's option values.
+        # This image has CMD and no ENTRYPOINT; Compose run replaces CMD.
+        # PYTHONPATH lets Python find the temporary test dependencies.
+        # The test sources stay read-only, and pytest's disk cache is disabled.
+        Invoke-Compose @(
+            'run', '--rm', '--no-deps',
+            '--env', 'PYTHONPATH=/tmp/agentsentry-test-deps:/app',
+            '--volume', "${testPath}:/app/tests:ro",
+            'agent', 'sh', '-c', $testCommand
+        )
     }
 
     'verify' {
