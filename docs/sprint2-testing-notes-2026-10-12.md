@@ -1,9 +1,13 @@
-# AgentSentry — Sprint 2 Integration and Testing Notes
+﻿# AgentSentry â€” Sprint 2 Integration and Testing Notes
 
-**Contributor:** Javon Jarmon (JJ)  
-**Date:** October 12, 2026  
-**Sprint deadline:** October 16, 2026  
-**Repository:** [Nailo27/AgentSentry](https://github.com/Nailo27/AgentSentry)  
+**Contributor:** Javon Jarmon (JJ)
+
+**Date:** October 12, 2026
+
+**Sprint deadline:** October 16, 2026
+
+**Repository:** [Nailo27/AgentSentry](https://github.com/Nailo27/AgentSentry)
+
 **Scope:** Local lab integration, Windows test-runner fixes, provider-test isolation, and smoke testing discussed in this session.
 
 ## Current status
@@ -245,7 +249,7 @@ Review evidence before publishing it. Preserve the synthetic test traces; exclud
 
 I integrated the lab/dashboard changes locally, fixed the Windows PowerShell test runner, and isolated the Ollama endpoint tests from Docker environment settings. The target-agent suite now passes all 24 tests. Two baseline smoke requests completed against the demo gateway: employee handbook access was allowed, and employee payroll access was denied without exposing payroll contents. The handbook run reproduced a duplicate read that is my next agent fix. Remaining integration work includes the shared gateway, policy-ID reconciliation, additional integrated tests, and the sprint evidence package. The latest fixes are committed locally as `99bdb8d`.
 
-## Duplicate-read fix verification — October 12
+## Duplicate-read fix verification â€” October 12
 
 - Applied the duplicate-read patch and rebuilt the Docker agent.
 - Automated tests: 30 passed, 1 existing Starlette deprecation warning.
