@@ -65,6 +65,11 @@ class Observation(BaseModel):
     decision: str
     reason: str
     data: str | None = None
+    # Identify the action that produced the result, especially for multi-file goals.
+    # Optional defaults preserve callers that construct older observations.
+    tool: Literal["read_file"] | None = None
+    action: Literal["read"] | None = None
+    resource: str | None = None
 
 
 class Step(BaseModel):

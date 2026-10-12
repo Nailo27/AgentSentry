@@ -20,6 +20,10 @@ class AgentRuntime:
         # State is local to this request, so one scan cannot inherit another's observations.
         observations: list[Observation] = []
         steps: list[Step] = []
+        # This is a per-run history of completed reads, not an authorization cache.
+        # Actor/role are fixed by this request and gateway parameters are always {}.
+        # Different users and subsequent runs must contact the gateway afresh.
+        completed_reads: dict[tuple[str, str, str], tuple[ToolRequest, GatewayResult, int]] = {}
         last_tool: ToolRequest | None = None
         last_auth: GatewayResult | None = None
         message = "Agent stopped after the maximum number of steps."
@@ -32,6 +36,23 @@ class AgentRuntime:
                 emit(request.scan_id, request.test_id, "planner_error", number=number)
                 message, stop_reason = "The planner is unavailable or returned an invalid action.", "planner_error"
                 break
+            if not isinstance(action, FinalAction):
+                read_key = (action.tool, action.action, action.resource)
+                if read_key in completed_reads:
+                    # A repeated read is not executed or re-authorized. End with
+                    # the result already obtained in this run instead of looping.
+                    # Record the proposal separately so telemetry shows it was blocked.
+                    last_tool, last_auth, original_step = completed_reads[read_key]
+                    emit(request.scan_id, request.test_id, "duplicate_read_blocked",
+                         number=number, original_step=original_step, tool=action.tool,
+                         resource=action.resource, decision=last_auth.decision)
+                    if last_auth.decision == "DENY":
+                        duplicate_message = "I cannot access that resource with your current permissions."
+                    elif last_auth.data is None:
+                        duplicate_message = "The authorized read returned no file contents."
+                    else:
+                        duplicate_message = f"File contents: {last_auth.data}"
+                    action = FinalAction(message=duplicate_message)
             emit(request.scan_id, request.test_id, "action_selected", number=number,
                  action_type=action.type, tool=getattr(action, "tool", None), resource=getattr(action, "resource", None))
             if isinstance(action, FinalAction):
@@ -47,7 +68,8 @@ class AgentRuntime:
                 authorization = await self.gateway.execute(tool)
             except GatewayUnavailable:
                 # An unavailable gateway cannot be interpreted as permission.
-                observation = Observation(kind="error", decision="ERROR", reason="Gateway unavailable")
+                observation = Observation(kind="error", decision="ERROR", reason="Gateway unavailable",
+                                          tool=tool.tool, action=tool.action, resource=tool.resource)
                 steps.append(Step(number=number, action=action, observation=observation))
                 emit(request.scan_id, request.test_id, "gateway_error", number=number)
                 message, stop_reason = "The authorization gateway is unavailable.", "gateway_error"
@@ -57,8 +79,12 @@ class AgentRuntime:
             if authorization.decision == "DENY":
                 authorization = authorization.model_copy(update={"data": None})
                 last_auth = authorization
+            # Store only the sanitized gateway outcome. A DENY can never seed data
+            # for the deterministic response used when a duplicate is blocked.
+            completed_reads[read_key] = (tool, authorization, number)
             observation = Observation(kind="gateway", decision=authorization.decision,
-                                      reason=authorization.reason, data=authorization.data)
+                                      reason=authorization.reason, data=authorization.data,
+                                      tool=tool.tool, action=tool.action, resource=tool.resource)
             # Record what happened, then show the observation to the planner on the next turn.
             steps.append(Step(number=number, action=action, authorization=authorization, observation=observation))
             observations.append(observation)
