@@ -1,0 +1,12 @@
+# Local lab configuration (may contain API keys)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Local evidence / results produced by a run
+evidence/
+*.db
