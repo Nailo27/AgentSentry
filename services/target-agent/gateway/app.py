@@ -15,7 +15,8 @@ app = FastAPI(title="AgentSentry Authorization Gateway")
 
 # Synthetic resources used only for Sprint 1 testing.
 #Fulfills my protected synthetic payroll resource responsibility
-
+# Current authorization policy version.
+POLICY_VERSION = "0.1"
 # Synthetic trusted identity source
 IDENTITIES = {
     "employee01": {"role": "employee"},
@@ -39,11 +40,10 @@ FILES = {
 @app.post("/execute", response_model=GatewayResult)
 def execute(request: ToolRequest):
     """Evaluate a synthetic Sprint 1 file-read request."""
-
-    # Resolve authorization attributes from the trusted synthetic identity source.
+    # Resolve the actor using the trusted identity source.
     identity = IDENTITIES.get(request.actor)
 
-    #Check for Unknown Actors
+    # Deny requests from actors that are not recognized.
     if identity is None:
         return GatewayResult(
             decision="DENY",
@@ -53,7 +53,11 @@ def execute(request: ToolRequest):
             reason="Actor could not be resolved from the trusted identity source.",
         )
 
-     # Sprint 1 currently implements the file-read authorization path.
+    # Retrieve the trusted role only after confirming identity.
+    # Never authorize based solely on the caller-provided role.
+    role = identity["role"]
+
+    # Sprint 1 implements the file-read authorization path.
     if request.tool != "read_file" or request.action != "read":
         return GatewayResult(
             decision="DENY",

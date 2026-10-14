@@ -5,6 +5,8 @@ COPY pyproject.toml ./
 COPY target_agent ./target_agent
 COPY demo_gateway.py ./
 RUN pip install --no-cache-dir .
+# Include the real authorization gateway in the container.
+COPY gateway ./gateway
 # Run the API as an unprivileged container user.
 USER 65532:65532
 CMD ["uvicorn", "target_agent.app:app", "--host", "0.0.0.0", "--port", "8000"]
