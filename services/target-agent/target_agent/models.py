@@ -55,6 +55,8 @@ class GatewayResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     decision: Literal["ALLOW", "DENY"]
     policy_id: str
+    policy_version: str | None = None
+    reason_code: str | None = None
     reason: str
     data: str | None = None
 
