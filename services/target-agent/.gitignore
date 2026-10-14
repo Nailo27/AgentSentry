@@ -1,0 +1,7 @@
+# Machine-local environments, caches, and credentials must not enter team Git.
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+.env

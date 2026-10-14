@@ -1,0 +1,213 @@
+# AgentSentry integrated lab environment (INF-02)
+#
+# =============================================================================
+# WHY THIS FILE EXISTS WHEN services/target-agent/compose.yaml ALREADY DOES
+# =============================================================================
+# They serve different jobs and both should stay.
+#
+#   services/target-agent/compose.yaml  The agent author's own development
+#                                       loop. Two services, no dashboard, run
+#                                       from inside that directory. Fast, and
+#                                       it does not care about the rest of the
+#                                       project.
+#
+#   compose.yaml (this file)            The integrated lab. Every Sprint 1
+#                                       component together, run from the repo
+#                                       root. This is what an assessment runs
+#                                       on and what the demo uses.
+#
+# This file does not modify, replace or copy anything under
+# services/target-agent/. It builds that directory as-is. If the agent author
+# changes their code, this lab picks the change up on the next build with no
+# edit here.
+#
+# =============================================================================
+# NETWORK ZONES
+# =============================================================================
+# The zone model comes from the project plan's Logical Network Zones section,
+# and the agent/gateway half of it was already established by
+# services/target-agent/compose.yaml. This file keeps that intact and adds the
+# scanner zone in front of it.
+#
+#   scanner_net    Zone A - dashboard and agent. Analyst-facing.
+#   agent_net      Zone B/C - agent and gateway. internal: true, so no route
+#                  off the machine. The gateway holds the protected synthetic
+#                  resources and must not be able to reach the internet, and
+#                  nothing outside this network can reach it.
+#   model_net      External zone - agent only. Exists purely so the optional
+#                  LLM planner (AGENT_PLANNER=llm) can reach a cloud provider.
+#                  In the default rule-based mode nothing uses it.
+#
+# The gateway is deliberately NOT on scanner_net. The dashboard must reach
+# protected data only by asking the agent, which is mediated. If the dashboard
+# could call the gateway directly, a PASS would stop proving anything about
+# whether the agent was correctly mediated.
+#
+# =============================================================================
+# PORT PUBLISHING
+# =============================================================================
+# Both published ports bind to 127.0.0.1 explicitly, following the convention
+# the agent author already set. Without the 127.0.0.1 prefix Docker binds
+# 0.0.0.0 and the service is reachable from anywhere on the LAN. Neither the
+# agent API nor the dashboard has any authentication, so LAN exposure would
+# mean anyone on the network can drive the agent and read every finding.
+# To share the dashboard with a teammate, screen share rather than removing
+# the loopback binding.
+
+name: agentsentry
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Authorization gateway (GW-01)  --  Zone C
+  # ---------------------------------------------------------------------------
+  # Builds from services/target-agent because the gateway imports
+  # `target_agent.models` for its ToolRequest/GatewayResult contracts. Both
+  # Caleb's gateway/app.py and the interim demo_gateway.py do this, so the
+  # gateway cannot be built from a context that lacks that package.
+  #
+  # GATEWAY_MODULE selects which gateway implementation runs:
+  #
+  #   demo_gateway:app   (default) The interim gateway that ships with the
+  #                      target agent branch. Works today, so the lab is
+  #                      runnable right now.
+  #   gateway.app:app    Caleb's gateway from feature/authorization-gateway,
+  #                      once that branch is merged AND the three blocking
+  #                      defects in docs/integration/gateway-integration-notes.md
+  #                      are fixed. Merging it in its current state will make
+  #                      this service fail on every request.
+  #
+  # Keeping this switchable means INF-02 is not blocked on GW-01 landing.
+  #
+  # NOTE for whoever merges GW-01: the switch is a one-line .env change only if
+  # the gateway module is inside this build context. On
+  # feature/authorization-gateway the code sits at the repository root
+  # (gateway/app.py), which this context does not include, so `COPY` would not
+  # pick it up. Either move the package under services/target-agent/ when
+  # merging, or give the gateway its own Dockerfile and build context. See
+  # docs/integration/gateway-integration-notes.md.
+  gateway:
+    build:
+      context: ./services/target-agent
+    image: agentsentry/target-agent:sprint1
+    container_name: agentsentry-gateway
+    command: ["uvicorn", "${GATEWAY_MODULE:-demo_gateway:app}",
+              "--host", "0.0.0.0", "--port", "8001"]
+    networks: [agent_net]
+    # No ports: the gateway is not reachable from the host at all. The only way
+    # to its synthetic payroll data is through the agent.
+    healthcheck:
+      # The gateway exposes no /health endpoint (its only route is POST
+      # /execute), so there is nothing to GET. This opens a TCP connection to
+      # the port instead, which proves uvicorn is up and accepting traffic --
+      # which is all `depends_on: service_healthy` needs to know.
+      # If GW-01 later adds a /health route, swap this for an HTTP check.
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('127.0.0.1', 8001), 2).close()\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Target agent (AGT-01)  --  Zone B
+  # ---------------------------------------------------------------------------
+  # Unmodified build of services/target-agent. The environment block mirrors
+  # that directory's own compose.yaml so the agent behaves identically whether
+  # it is started from here or from there.
+  agent:
+    build:
+      context: ./services/target-agent
+    image: agentsentry/target-agent:sprint1
+    container_name: agentsentry-agent
+    environment:
+      # Service name + port, resolved by Docker's internal DNS on agent_net.
+      # This is the only route the agent has to protected resources.
+      POLICY_GATEWAY_URL: http://gateway:8001
+      # rule = deterministic baseline, no API key needed. The Sprint 1 demo
+      # must stay reproducible, so this defaults to rule.
+      AGENT_PLANNER: ${AGENT_PLANNER:-rule}
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-openai}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    ports:
+      # Published so the agent's API can be exercised with curl during
+      # development, independently of the dashboard.
+      - "127.0.0.1:${AGENT_PORT:-8000}:8000"
+    depends_on:
+      gateway:
+        # Wait for the gateway to answer, not merely to be created. The agent's
+        # runtime fails closed when the gateway is unreachable, so starting it
+        # first would produce confusing gateway_error results on the first few
+        # requests of every `up`.
+        condition: service_healthy
+    networks: [agent_net, model_net, scanner_net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=2)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Assessment dashboard (UI-01)  --  Zone A
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./services/dashboard
+    image: agentsentry/dashboard:sprint1
+    container_name: agentsentry-dashboard
+    environment:
+      TARGET_AGENT_URL: http://agent:8000
+      PERMISSION_MATRIX: /app/policy/permission_matrix.yaml
+      RESULTS_DB: /evidence/results.db
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8501}:8501"
+    depends_on:
+      agent:
+        condition: service_healthy
+    networks: [scanner_net]
+    volumes:
+      # The permission matrix is mounted read-only rather than baked into the
+      # image. Two reasons: the policy is owned by a different teammate and
+      # lives under docs/policies, and mounting it means a policy correction
+      # takes effect on restart instead of requiring an image rebuild.
+      # :ro guarantees the dashboard cannot alter the ground truth it is
+      # scored against.
+      - ./docs/policies/permission_matrix.yaml:/app/policy/permission_matrix.yaml:ro
+      # Named volume so recorded findings survive `docker compose down`.
+      # Removed only by `docker compose down -v`.
+      - evidence:/evidence
+    restart: unless-stopped
+
+networks:
+  scanner_net:
+    name: agentsentry_scanner_net
+    driver: bridge
+  agent_net:
+    name: agentsentry_agent_net
+    driver: bridge
+    # internal: true removes the default gateway from this network. Containers
+    # on it can talk to each other and to nothing else -- no DNS to the
+    # internet, no outbound route. This is the single most important line in
+    # the file: it is what makes "the mock resources cannot phone home" a
+    # property of the network rather than a promise in application code.
+    internal: true
+  model_net:
+    name: agentsentry_model_net
+    driver: bridge
+
+volumes:
+  evidence:
+    # Named for this specific lab rather than just "agentsentry_evidence".
+    # An earlier prototype used that generic name with the same Compose project
+    # name, so its results.db was still being mounted here and its incompatible
+    # findings table broke every write. Docker named volumes outlive the
+    # project that made them, so the name has to be specific enough not to
+    # collide with anything else on a teammate's machine.
+    name: agentsentry_sprint1_evidence
