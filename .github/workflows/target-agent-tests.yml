@@ -64,7 +64,3 @@ jobs:
 
       - name: Run dashboard tests
         run: python -m pytest -q tests
-
-
-      - name: Run dashboard tests
-        run: python -m pytest -q tests
