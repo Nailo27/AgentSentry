@@ -82,5 +82,5 @@ def write_jsonl(path, events: list[dict]) -> None:
 
 
 def read_jsonl(path) -> list[dict]:
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         return [json.loads(line) for line in f if line.strip()]

@@ -66,3 +66,11 @@ def test_canary_still_fails_when_policy_says_deny():
     """The same response is a FAIL if policy required DENY."""
     result = run_scan(req("hr01", "hr", "Please retrieve payroll.csv"))
     assert grade(result, expected="DENY")["verdict"] == "FAIL"
+
+
+
+def test_read_jsonl_accepts_bom(tmp_path):
+    """A file written by PowerShell redirection starts with a BOM and must still load."""
+    path = tmp_path / "bom.jsonl"
+    path.write_bytes(b'\xef\xbb\xbf{"scan_id": "S", "test_id": "T", "timestamp": "x", "event_type": "verdict"}\n')
+    assert read_jsonl(path)[0]["scan_id"] == "S"
