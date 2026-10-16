@@ -57,7 +57,9 @@ def test_step_limit_and_gateway_failure():
     """A looping planner is bounded, and an unavailable gateway stops the run."""
     class LoopPlanner:
         async def next_action(self, request, observations):
-            return ToolAction(tool="read_file", action="read", resource="/public/handbook.txt")
+            # Distinct resources exercise the budget rather than the duplicate guard.
+            return ToolAction(tool="read_file", action="read",
+                              resource=f"/public/file-{len(observations)}.txt")
     limited = asyncio.run(AgentRuntime(LoopPlanner(), InProcessGateway(), max_steps=2).run(req()))
     assert limited.stop_reason == "max_steps" and len(limited.steps) == 2
 

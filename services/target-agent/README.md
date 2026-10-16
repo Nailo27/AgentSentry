@@ -43,6 +43,30 @@ Expect two steps: a `read_file` request to `/restricted/payroll/payroll.csv`, th
 
 The loop has a four-step limit and fails closed on gateway errors. It discards any data returned alongside a denial. Resource contents are treated as data; the current deterministic planner cannot execute instructions embedded in a file. The mock gateway is a local example and should not be used for real enterprise authorization.
 
+### Repeated-read safeguard
+
+Observations include the tool, action, and resource that produced each gateway
+result. The LLM is instructed to answer from an existing successful result and
+not retry an identical denied read. If a planner still repeats the same read in
+one run, the runtime blocks that duplicate and returns a deterministic final
+answer from the earlier result. An earlier denial produces a refusal and no data.
+The existing `stop_reason=final` and response envelope are preserved.
+
+For example, `read handbook -> read handbook -> final` now executes one gateway
+request; a repeated proposal is stopped at step 2 with a final response. A
+`duplicate_read_blocked` event records the proposed resource and original step,
+without file contents. The response steps show the executed read and the final
+answer; use the event logs to distinguish a runtime-stopped duplicate from a
+model that chose to finish normally.
+
+This safeguard matches exact tool/action/resource values, uses only results from
+the current run, and applies to both rule and LLM planners. Different resources
+still require separate gateway calls, and later requests always contact the
+gateway again, even for the same user. Intentional re-reads or refreshes within
+one run are not supported. It does not normalize path aliases or replace gateway
+authorization. Multi-step runs that repeatedly request different resources
+remain bounded by the step limit.
+
 ## Team integration
 
 Replace `POLICY_GATEWAY_URL` with Caleb's gateway address. The required `POST /execute` contract is:

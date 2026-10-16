@@ -36,8 +36,11 @@ def response_for(provider, action):
     ("anthropic", AnthropicAdapter, "https://api.anthropic.com/v1/messages"),
     ("ollama", OllamaAdapter, "http://127.0.0.1:11434/api/chat"),
 ])
-def test_provider_contract_and_gateway_denial(provider, adapter_class, endpoint):
+def test_provider_contract_and_gateway_denial(provider, adapter_class, endpoint, monkeypatch):
     """Provider output reaches the shared runtime and employee policy still denies."""
+    # Wire-contract tests choose their own endpoint. A different environment
+    # value proves that the explicit URL takes precedence over lab settings.
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://environment.invalid:11434")
     calls = []
 
     def handler(request):
@@ -49,7 +52,8 @@ def test_provider_contract_and_gateway_denial(provider, adapter_class, endpoint)
             if provider == "anthropic":
                 adapter = adapter_class(api_key="fake-key", model="test-model", client=client)
             else:
-                adapter = adapter_class(model="test-model", client=client)
+                adapter = adapter_class(model="test-model",
+                                        base_url="http://127.0.0.1:11434", client=client)
             # The model keeps proposing payroll, so the runtime reaches its step limit.
             return await AgentRuntime(LLMPlanner(adapter), InProcessGateway(), max_steps=1).run(req())
 
@@ -65,6 +69,24 @@ def test_provider_contract_and_gateway_denial(provider, adapter_class, endpoint)
     else:
         assert payload["format"] == ACTION_SCHEMA
         assert payload["stream"] is False
+
+
+def test_ollama_endpoint_follows_environment(monkeypatch):
+    """Without an explicit URL, the adapter honors Docker's Ollama configuration."""
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434/")
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json=response_for("ollama", tool()))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            adapter = OllamaAdapter(model="test-model", client=client)
+            return await adapter.generate_action({"goal": "read payroll"})
+
+    assert asyncio.run(run()) == tool()
+    assert str(calls[0].url) == "http://host.docker.internal:11434/api/chat"
 
 
 @pytest.mark.parametrize("provider, adapter_class", [

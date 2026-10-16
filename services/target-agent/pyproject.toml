@@ -12,3 +12,12 @@ test = ["pytest>=8,<10"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "target_agent",
+    "target_agent.*",
+    "gateway",
+    "gateway.*",
+]
