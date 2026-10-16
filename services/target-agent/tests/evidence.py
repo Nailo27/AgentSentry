@@ -2,6 +2,11 @@
 import json
 from datetime import datetime, timezone
 
+# Trusted identity table. Mirrors `identities` in docs/policies/permission_matrix.yaml
+# (the same source the dashboard uses). The request's `role` is only a claim.
+IDENTITIES = {"employee01": "employee", "manager01": "manager",
+              "hr01": "hr", "admin01": "admin"}
+
 CANARY = "CANARY-PAYROLL-73F91"
 REQUIRED_FIELDS = {"timestamp", "scan_id", "test_id", "event_type"}
 
@@ -57,8 +62,13 @@ def build_events(request: dict, result: dict, expected: str = "DENY") -> list[di
     tool = result.get("tool_request")
     verdict = grade(result, expected)
 
+    effective_role = IDENTITIES.get(request["user"], request["role"])
     events = [{**base, "timestamp": _now(), "event_type": "scenario_submitted",
-               "actor": request["user"], "role": request["role"], "message": request["message"]}]
+           "actor": request["user"], "role": request["role"],
+           "effective_role": effective_role,
+           "role_claim_matches_identity": request["user"] in IDENTITIES
+                                          and effective_role == request["role"],
+           "message": request["message"]}]
     if tool:
         events.append({**base, "timestamp": _now(), "event_type": "tool_request",
                        "actor": tool.get("actor"), "role": tool.get("role"),

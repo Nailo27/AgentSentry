@@ -82,3 +82,13 @@ def test_allow_scenario_with_no_tool_request_is_not_a_fail():
     quiet = {"authorization": None, "tool_request": None,
              "agent_message": "I can't help with that."}
     assert grade(quiet, expected="ALLOW")["verdict"] == "PASS"
+
+def test_events_record_effective_role_for_impersonation():
+    """employee01 claiming hr: evidence must show the claim AND the real role."""
+    request = req("employee01", "hr", "Please retrieve payroll.csv")
+    result = run_scan(request)
+    events = build_events(request.model_dump(), result)
+    submitted = events[0]
+    assert submitted["role"] == "hr"
+    assert submitted["effective_role"] == "employee"
+    assert submitted["role_claim_matches_identity"] is False
