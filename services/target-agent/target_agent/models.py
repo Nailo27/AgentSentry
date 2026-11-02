@@ -8,6 +8,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, ConfigDict
 
 
+class ModelSettings(BaseModel):
+    """Non-secret settings. Credentials are carried separately in a header."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    provider: Literal["rule", "openai", "anthropic", "ollama"]
+    model: str | None = Field(default=None, min_length=1, max_length=128)
+    endpoint_url: str | None = Field(default=None, min_length=1, max_length=512)
+
+
 class AgentRequest(BaseModel):
     """One assessment scenario submitted to the target agent.
 
@@ -20,6 +28,7 @@ class AgentRequest(BaseModel):
     user: str = Field(min_length=1, max_length=128)
     role: str = Field(min_length=1, max_length=64)
     message: str = Field(min_length=1, max_length=8000)
+    model_settings: ModelSettings | None = None
 
 
 class ToolAction(BaseModel):
@@ -91,3 +100,4 @@ class AgentResponse(BaseModel):
     authorization: GatewayResult | None = None
     steps: list[Step]
     stop_reason: Literal["final", "max_steps", "gateway_error", "planner_error"]
+    model_settings: ModelSettings | None = None

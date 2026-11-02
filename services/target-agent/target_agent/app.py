@@ -1,46 +1,74 @@
-"""Thin HTTP entry point; the runtime owns decisions and gateway calls."""
+"""HTTP entry points with per-assessment models and independent authorization."""
 
 import logging
-import os
-from fastapi import FastAPI
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+from .connections import (ConnectionConfigurationError, PROVIDER_KEY_HEADER,
+                          make_connection, provider_options)
 from .gateway import HttpGateway
-from .models import AgentRequest, AgentResponse
-from .planner import RuleBasedPlanner
-from .llm_planner import LLMPlanner, OpenAIResponsesAdapter, AnthropicAdapter, OllamaAdapter
+from .llm_planner import PlannerUnavailable
+from .models import AgentRequest, AgentResponse, FinalAction, ModelSettings
 from .runtime import AgentRuntime
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 app = FastAPI(title="AgentSentry Target Agent")
 
+
 def make_planner():
-    """Select the baseline or configured model provider at service startup."""
-    mode = os.getenv("AGENT_PLANNER", "rule").lower()
-    if mode == "rule":
-        return RuleBasedPlanner()
-    if mode == "llm":
-        provider = os.getenv("AGENT_PROVIDER", "openai").lower()
-        adapters = {
-            "openai": OpenAIResponsesAdapter,
-            "anthropic": AnthropicAdapter,
-            "ollama": OllamaAdapter,
-        }
-        if provider not in adapters:
-            raise ValueError("AGENT_PROVIDER must be 'openai', 'anthropic', or 'ollama'")
-        return LLMPlanner(adapters[provider]())
-    raise ValueError("AGENT_PLANNER must be 'rule' or 'llm'")
+    """Preserve the existing factory for environment-based callers and tests."""
+    return make_connection()[0]
 
 
-# Startup configuration is fixed for this process; restart to switch providers.
-runtime = AgentRuntime(make_planner(), HttpGateway())
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_request: Request, exc: RequestValidationError):
+    # Never echo rejected credentials accidentally supplied in the JSON body.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(error["loc"]), "type": error["type"], "msg": error["msg"]}
+        for error in exc.errors()
+    ]})
+
+
+def connection(selection: ModelSettings | None, request: Request):
+    try:
+        return make_connection(selection, request.headers.get(PROVIDER_KEY_HEADER))
+    except ConnectionConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
 @app.get("/health")
 def health():
-    """Report that the API process is alive (not downstream gateway readiness)."""
+    """API liveness; the explicit connection check exercises a model."""
     return {"status": "ok"}
 
 
+@app.get("/model/providers")
+def providers():
+    """Return non-secret defaults before any provider key has been entered."""
+    return {"providers": provider_options()}
+
+
+@app.post("/model/check")
+async def check_model(selection: ModelSettings, http_request: Request):
+    """One small model request, with no gateway call or recorded finding."""
+    planner, settings = connection(selection, http_request)
+    probe = AgentRequest(scan_id="CONNECTION-CHECK", test_id="CONNECTION-CHECK",
+                         user="connection-check", role="employee",
+                         message="Connection check. Reply with a final message saying Ready. Do not use tools.")
+    try:
+        action = await planner.next_action(probe, [])
+    except PlannerUnavailable:
+        raise HTTPException(status_code=502, detail="Model check failed. Check the key, model support, service availability, and quota.") from None
+    if settings.provider != "rule" and not isinstance(action, FinalAction):
+        raise HTTPException(status_code=502, detail="The model did not return the expected final action.")
+    return {"status": "ok", "model_settings": settings.model_dump()}
+
+
 @app.post("/agent/message", response_model=AgentResponse)
-async def message(request: AgentRequest):
-    """Run one isolated assessment request and return its observable trace."""
-    return await runtime.run(request)
+async def message(request: AgentRequest, http_request: Request):
+    # A fresh planner prevents provider/key changes leaking into another run.
+    planner, settings = connection(request.model_settings, http_request)
+    response = await AgentRuntime(planner, HttpGateway()).run(request)
+    return response.model_copy(update={"model_settings": settings})

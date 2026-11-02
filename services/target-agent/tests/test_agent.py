@@ -70,16 +70,12 @@ def test_step_limit_and_gateway_failure():
     assert failed.stop_reason == "gateway_error" and len(failed.steps) == 1
 
 
-def test_api_contract():
+def test_api_contract(monkeypatch):
     """The HTTP endpoint returns a correlated denial trace to the scanner."""
     from target_agent import app as module
-    # Swap the process runtime only for this request, then restore it.
-    original = module.runtime
-    module.runtime = AgentRuntime(RuleBasedPlanner(), InProcessGateway())
-    try:
-        response = TestClient(agent_app).post("/agent/message", json=req().model_dump())
-        assert response.status_code == 200
-        assert response.json()["scan_id"] == "SCAN-001"
-        assert response.json()["authorization"]["decision"] == "DENY"
-    finally:
-        module.runtime = original
+    monkeypatch.setenv("AGENT_PLANNER", "rule")
+    monkeypatch.setattr(module, "HttpGateway", InProcessGateway)
+    response = TestClient(agent_app).post("/agent/message", json=req().model_dump())
+    assert response.status_code == 200
+    assert response.json()["scan_id"] == "SCAN-001"
+    assert response.json()["authorization"]["decision"] == "DENY"
