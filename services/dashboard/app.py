@@ -27,8 +27,8 @@ its own, a PASS would no longer prove the agent was correctly mediated. It sees
 exactly what the agent chose to return, which is the same view a real analyst
 would have.
 
-Note that `AgentRequest` is declared with `extra="forbid"`, so the JSON body
-must contain exactly scan_id, test_id, user, role and message -- no extra keys.
+AgentRequest permits optional non-secret model_settings. The API key uses a
+separate header and must never be included in a scenario or evidence record.
 """
 
 from __future__ import annotations
@@ -44,9 +44,10 @@ import streamlit as st
 import assessment
 import evidence_export
 import store
+import model_connection
 
 AGENT_URL = os.environ.get("TARGET_AGENT_URL", "http://agent:8000").rstrip("/")
-REQUEST_TIMEOUT = float(os.environ.get("AGENT_TIMEOUT", "30"))
+REQUEST_TIMEOUT = float(os.environ.get("AGENT_TIMEOUT", "600"))
 
 RESULT_COLOR = {"FAIL": "#b3261e", "WARNING": "#a9670a", "PASS": "#1b6b3a"}
 
@@ -145,60 +146,125 @@ with st.sidebar:
         store.clear(conn)
         st.rerun()
 
-# --- run a scenario ----------------------------------------------------------
-st.subheader("Run an assessment scenario")
+# --- model connection and scenario -----------------------------------------
+def _clear_key():
+    """A key entered for one provider must not follow a provider change."""
+    st.session_state["provider_api_key"] = ""
+    st.session_state.pop("_submitted_provider_key", None)
 
-col_left, col_right = st.columns([1, 1])
 
-with col_left:
-    preset_name = st.selectbox("Scenario", list(PRESETS))
-    preset = PRESETS[preset_name]
-    scan_id = st.text_input("Scan ID", value=f"SCAN-{uuid.uuid4().hex[:8].upper()}")
-    test_id = st.text_input("Test ID", value=preset["test_id"])
+def _take_key():
+    """Clear the password widget before the network request, even on failure."""
+    st.session_state["_submitted_provider_key"] = st.session_state.get("provider_api_key", "")
+    st.session_state["provider_api_key"] = ""
 
-with col_right:
-    user = st.text_input("Requesting user", value=preset["user"])
-    role = st.selectbox(
-        "Role", matrix.get("roles", ["employee", "manager", "hr", "admin"]),
-        index=(matrix.get("roles", ["employee"]).index(preset["role"])
-               if preset["role"] in matrix.get("roles", []) else 0),
-    )
+
+st.subheader("Model connection")
+try:
+    options_response = httpx.get(f"{AGENT_URL}/model/providers", timeout=5)
+    options_response.raise_for_status()
+    options = {item["provider"]: item for item in options_response.json()["providers"]}
+except (httpx.HTTPError, ValueError, KeyError, TypeError):
+    st.error("Model settings are unavailable. Rebuild and start the updated agent.")
+    st.stop()
+
+labels = {"rule": "Rule-based baseline", "openai": "OpenAI", "anthropic": "Anthropic", "ollama": "Ollama"}
+provider = st.selectbox("Provider", list(options), format_func=lambda item: labels[item],
+                        key="selected_provider", on_change=_clear_key)
+selected = options[provider]
+if provider == "ollama":
+    st.caption("Provider endpoint")
+    st.code(selected["endpoint_url"], language=None)
+st.caption("Each assessment uses its own selection. Provider keys are cleared after submission.")
+
+# Scenario selection stays outside the form so its defaults update immediately.
+preset_name = st.selectbox("Scenario", list(PRESETS))
+preset = PRESETS[preset_name]
+st.session_state.setdefault("scan_id", f"SCAN-{uuid.uuid4().hex[:8].upper()}")
+with st.form("assessment_form"):
+    if provider != "rule":
+        model = st.text_input("Model ID", value=selected["model"] or "",
+                              key=f"model_id_{provider}", help="Use a model that supports structured JSON output.")
+    else:
+        model = None
+    if provider in ("openai", "anthropic"):
+        endpoint_url = st.text_input(
+            "API endpoint URL", value=selected["endpoint_url"], key=f"endpoint_url_{provider}",
+            help="Enter the complete Responses or Messages API URL. Custom endpoints require operator approval on the agent.")
+        st.caption("Your key is sent to this endpoint. Use the official URL or an approved, trusted API proxy.")
+        st.text_input("API key", type="password", key="provider_api_key",
+                      help="Used for this submission only. Leave blank to use this provider's server-configured key.")
+        st.caption("Connection checks and assessments make billable provider requests. Re-enter a personal key for each submission.")
+    else:
+        endpoint_url = selected["endpoint_url"]
+
+    st.subheader("Assessment scenario")
+    col_left, col_right = st.columns([1, 1])
+    with col_left:
+        scan_id = st.text_input("Scan ID", key="scan_id")
+        test_id = st.text_input("Test ID", value=preset["test_id"])
+    with col_right:
+        user = st.text_input("Requesting user", value=preset["user"])
+        role = st.selectbox("Role", matrix.get("roles", ["employee", "manager", "hr", "admin"]),
+                            index=(matrix.get("roles", ["employee"]).index(preset["role"])
+                                   if preset["role"] in matrix.get("roles", []) else 0))
     message = st.text_area("Scenario message", value=preset["message"], height=90)
+    st.caption("User and role are synthetic lab inputs. The independent gateway still authorizes every tool call.")
+    check_clicked = st.form_submit_button("Check model connection", on_click=_take_key)
+    run_clicked = st.form_submit_button("Submit to target agent", type="primary", on_click=_take_key)
 
-st.caption(
-    "`user` and `role` are lab harness inputs, not authenticated identity. "
-    "The gateway binds them itself; a role typed here is a claim, which is "
-    "exactly what AGENT-IDENT-001 is designed to test."
-)
-
-if st.button("Submit to target agent", type="primary", disabled=not message.strip()):
-    request_body = {
-        "scan_id": scan_id, "test_id": test_id,
-        "user": user, "role": role, "message": message,
-    }
+# The temporary callback value is consumed once and is never saved in a finding.
+submitted_key = st.session_state.pop("_submitted_provider_key", "")
+if check_clicked or run_clicked:
+    if run_clicked:
+        # Do not leave an earlier finding labeled as the latest assessment
+        # when this submission fails before a new finding can be recorded.
+        st.session_state.pop("last_finding", None)
+    model_settings = {"provider": provider}
+    if provider != "rule":
+        if not model or not model.strip():
+            st.error("Enter a model ID before continuing.")
+            st.stop()
+        if not endpoint_url or not endpoint_url.strip():
+            st.error("Enter an API endpoint URL.")
+            st.stop()
+        model_settings.update(model=model.strip(), endpoint_url=endpoint_url.strip())
+    request_body = {"scan_id": scan_id, "test_id": test_id, "user": user,
+                    "role": role, "message": message, "model_settings": model_settings}
+    if run_clicked and not message.strip():
+        st.error("Enter a scenario message.")
+        st.stop()
     try:
-        resp = httpx.post(f"{AGENT_URL}/agent/message", json=request_body,
-                          timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        response_body = resp.json()
-    except httpx.HTTPStatusError as exc:
-        st.error(f"Agent returned HTTP {exc.response.status_code}")
-        st.code(exc.response.text[:2000], language="json")
+        with st.spinner("Checking model connection..." if check_clicked else "Running assessment..."):
+            response_body = model_connection.submit(
+                AGENT_URL, "/model/check" if check_clicked else "/agent/message",
+                model_settings if check_clicked else request_body, submitted_key, REQUEST_TIMEOUT)
+    except model_connection.ModelConnectionError as exc:
+        st.error(str(exc))
         st.stop()
-    except Exception as exc:
-        st.error(f"Could not reach the agent: {exc}")
-        st.stop()
-
-    finding = assessment.assess(matrix, request_body, response_body)
-    store.record(conn, finding)
-    st.session_state["last_finding"] = finding.to_dict()
-    st.rerun()
+    finally:
+        submitted_key = ""
+    if check_clicked:
+        st.success("Connection check succeeded. No security assessment or gateway read was performed.")
+    elif response_body.get("stop_reason") != "final":
+        st.error("The assessment did not complete. No security verdict was assigned.")
+        with st.expander("Incomplete run trace"):
+            st.code(json.dumps(response_body, indent=2), language="json")
+    else:
+        finding = assessment.assess(matrix, request_body, response_body)
+        store.record(conn, finding)
+        st.session_state["last_finding"] = finding.to_dict()
+        st.rerun()
 
 # --- most recent finding -----------------------------------------------------
 last = st.session_state.get("last_finding")
 if last:
     st.divider()
     st.subheader("Latest result")
+
+    used_model = (last.get("raw_response") or {}).get("model_settings")
+    if used_model:
+        st.caption(f"Provider: {used_model['provider']} | Model: {used_model.get('model') or 'rule-based'}")
 
     st.markdown(
         _badge(last["result"], RESULT_COLOR.get(last["result"], "#555"))

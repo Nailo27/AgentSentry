@@ -132,6 +132,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_ALLOWED_ENDPOINTS: ${OPENAI_ALLOWED_ENDPOINTS:-}
+      ANTHROPIC_ALLOWED_ENDPOINTS: ${ANTHROPIC_ALLOWED_ENDPOINTS:-}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     ports:
@@ -166,6 +168,8 @@ services:
       TARGET_AGENT_URL: http://agent:8000
       PERMISSION_MATRIX: /app/policy/permission_matrix.yaml
       RESULTS_DB: /evidence/results.db
+      # Four local model turns can each take up to 120 seconds.
+      AGENT_TIMEOUT: ${AGENT_TIMEOUT:-600}
     ports:
       - "127.0.0.1:${DASHBOARD_PORT:-8501}:8501"
     depends_on:

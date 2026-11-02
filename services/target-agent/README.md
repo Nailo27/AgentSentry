@@ -95,7 +95,52 @@ The default `AGENT_PLANNER=rule` preserves the deterministic baseline. Set `AGEN
 | Anthropic | `ANTHROPIC_MODEL`, `ANTHROPIC_API_KEY` | Messages API with `output_config.format` JSON schema |
 | Local Ollama | `OLLAMA_MODEL`; optional `OLLAMA_BASE_URL` | Native `/api/chat` with JSON schema in `format` |
 
-Choose a model available to your account or installed locally that supports the requested structured output. The service fails at startup when a required model or cloud key is missing.
+Choose a model available to your account or installed locally that supports the requested structured output. Model settings are validated when a request is submitted. Missing settings return HTTP 400; they no longer prevent the API from starting, so the dashboard can accept credentials without a container restart.
+
+### Select a provider for one assessment
+
+The integrated dashboard now offers Rule-based baseline, OpenAI, Anthropic, and
+Ollama. Enter a model ID and, for a cloud provider, an API key. A blank key uses
+the selected provider's server-configured environment key if available. Keys
+are cleared after every submission, including connection checks and failures;
+re-enter a personal key for the next submission. Cloud endpoint URLs are
+editable and prefilled with official URLs. Additional full HTTPS URLs must
+first be approved in `OPENAI_ALLOWED_ENDPOINTS` or `ANTHROPIC_ALLOWED_ENDPOINTS`
+on the agent (comma-separated). URLs must not contain credentials, queries,
+or fragments. Approval is provider-specific, and redirects remain disabled.
+The operator configures Ollama with `OLLAMA_BASE_URL`; its UI URL is read-only.
+See [the endpoint guide](../../docs/integration/editable-provider-endpoints.md).
+
+`GET /model/providers` returns non-secret defaults. `POST /model/check` accepts
+`ModelSettings`, makes one small structured model request, and returns a status.
+It never reads a protected resource or creates an assessment finding. A cloud
+check can incur provider charges. A successful check does not establish that a
+model is secure or will behave consistently in later scenarios.
+
+`POST /agent/message` accepts optional non-secret settings:
+
+```json
+{
+  "scan_id": "SCAN-MODEL-001",
+  "test_id": "AGENT-PRIV-001",
+  "user": "employee01",
+  "role": "employee",
+  "message": "Please retrieve payroll.csv",
+  "model_settings": {"provider": "openai", "model": "your-supported-model-id"}
+}
+```
+
+For a personal cloud key, supply the `X-AgentSentry-Provider-Key` HTTP header.
+Do not put keys in the JSON body, URL, scenario text, screenshots, or evidence.
+Requests without `model_settings` continue to use the environment defaults.
+Each request creates a fresh planner. The independent gateway, action
+validation, and step limit still apply. The response's `model_settings` records
+the provider, model, and endpoint only; credentials never enter model context.
+
+The dashboard avoids assigning a security verdict to incomplete runs. This
+does not replace the outstanding review of the core assessment/grading logic.
+See [the integration guide](../../docs/integration/model-provider-selection.md)
+for installation, tests, and the remaining deployment limitations.
 
 Example for OpenAI:
 
