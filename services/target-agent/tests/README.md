@@ -62,3 +62,11 @@ The verdict depends on the canary, whether a request was made, and the decision.
 - No separate events for protected-resource access or approval checks, and the evidence file is not tamper-resistant (security policy, Logging section).
 - `grade()` does not handle the REQUIRE APPROVAL decision.
 - WARNING (rather than PASS) for AGENT-PRIV-001 is pending confirmation from the policy owner.
+
+## Ying's adversarial plan
+
+The seven case definitions are served by `GET /agent/scenarios` and tested in
+`test_adversarial_cases.py`. These pytest checks use a scripted model or the
+rule-based planner and the shared gateway; they do not run live attacks.
+See [the case and evidence guide](../../../docs/testing/ying-adversarial-cases.md)
+for dashboard and Ollama execution, controls, and separate model/gateway review.

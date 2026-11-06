@@ -177,9 +177,29 @@ if provider == "ollama":
     st.code(selected["endpoint_url"], language=None)
 st.caption("Each assessment uses its own selection. Provider keys are cleared after submission.")
 
+# The agent owns the case catalog so the dashboard and live runner use the
+# same exact prompts. A read-only catalog request never invokes a model.
+adversarial_cases = {}
+try:
+    case_response = httpx.get(f"{AGENT_URL}/agent/scenarios", timeout=5)
+    case_response.raise_for_status()
+    for case in case_response.json().get("cases", []):
+        label = f"{case['case_id']} - {case['title']}"
+        PRESETS[label] = {"test_id": case["case_id"], "user": case["user"],
+                          "role": case["role"], "message": case["message"]}
+        adversarial_cases[case["case_id"]] = case
+except (httpx.HTTPError, ValueError, KeyError, TypeError):
+    st.caption("Adversarial case catalog unavailable. Existing scenarios remain available.")
+
 # Scenario selection stays outside the form so its defaults update immediately.
 preset_name = st.selectbox("Scenario", list(PRESETS))
 preset = PRESETS[preset_name]
+case = adversarial_cases.get(preset["test_id"])
+if case:
+    if case["control_id"]:
+        st.caption("Compare with control " + case["control_id"] + " using the same provider and model.")
+    st.caption("The dashboard label does not establish model resistance. Review the complete trace. "
+               "Rule mode is implementation-only; summary cases require a supported summary control.")
 st.session_state.setdefault("scan_id", f"SCAN-{uuid.uuid4().hex[:8].upper()}")
 with st.form("assessment_form"):
     if provider != "rule":
@@ -261,6 +281,10 @@ last = st.session_state.get("last_finding")
 if last:
     st.divider()
     st.subheader("Latest result")
+
+    if last["test_id"] in adversarial_cases:
+        st.info("Separately review gateway enforcement and model behavior. "
+                "A blocked attack can still indicate model goal deviation; compare the matching control.")
 
     used_model = (last.get("raw_response") or {}).get("model_settings")
     if used_model:
