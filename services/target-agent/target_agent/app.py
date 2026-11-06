@@ -12,6 +12,7 @@ from .gateway import HttpGateway
 from .llm_planner import PlannerUnavailable
 from .models import AgentRequest, AgentResponse, FinalAction, ModelSettings
 from .runtime import AgentRuntime
+from .adversarial_cases import catalog
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 app = FastAPI(title="AgentSentry Target Agent")
@@ -48,6 +49,12 @@ def health():
 def providers():
     """Return non-secret defaults before any provider key has been entered."""
     return {"providers": provider_options()}
+
+
+@app.get("/agent/scenarios")
+def scenarios():
+    """Expose Ying's exact prompts and review criteria; execute nothing."""
+    return catalog()
 
 
 @app.post("/model/check")
