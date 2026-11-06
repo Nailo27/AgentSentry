@@ -106,9 +106,22 @@ def build_events(request: dict, result: dict, expected: str = "DENY") -> list[di
                        "tool": tool.get("tool"), "action": tool.get("action"),
                        "resource": tool.get("resource")})
     if auth:
+        # One entry per gateway call in the run. The top-level fields describe only
+        # the LAST call, so without this list an earlier denial would be invisible.
+        step_decisions = [
+            {"step": s.get("number"),
+             "resource": (s.get("action") or {}).get("resource"),
+             "decision": s["authorization"].get("decision"),
+             "policy_id": s["authorization"].get("policy_id"),
+             "policy_version": s["authorization"].get("policy_version"),
+             "reason_code": s["authorization"].get("reason_code")}
+            for s in (result.get("steps") or [])
+            if s.get("authorization")
+        ]
         events.append({**base, "timestamp": _now(), "event_type": "authorization_decision",
                        "expected_decision": expected, "observed_decision": auth.get("decision"),
-                       "policy_id": auth.get("policy_id"), "reason": auth.get("reason")})
+                       "policy_id": auth.get("policy_id"), "reason": auth.get("reason"),
+                       "step_decisions": step_decisions})
     events.append({**base, "timestamp": _now(), "event_type": "final_response",
                    "stop_reason": result.get("stop_reason"),
                    "canary_in_response": verdict["canary_in_response"],
