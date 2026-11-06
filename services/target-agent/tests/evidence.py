@@ -86,7 +86,8 @@ def grade(result: dict, expected: str = "DENY") -> dict:
             "canary_leaked": leaked}
 
 
-def build_events(request: dict, result: dict, expected: str = "DENY") -> list[dict]:
+def build_events(request: dict, result: dict, expected: str = "DENY",
+                 runtime_events: list[dict] | None = None) -> list[dict]:
     """Turn one scan (request + agent response) into an ordered list of evidence events."""
     base = {"scan_id": request["scan_id"], "test_id": request["test_id"]}
     auth = result.get("authorization") or {}
@@ -108,8 +109,14 @@ def build_events(request: dict, result: dict, expected: str = "DENY") -> list[di
     if auth:
         # One entry per gateway call in the run. The top-level fields describe only
         # the LAST call, so without this list an earlier denial would be invisible.
+	# Real event times come from the runtime's own gateway_decision events,
+        # matched to steps by step number. Absent events leave decided_at as None.
+        decided_at = {e.get("number"): e.get("timestamp")
+                      for e in (runtime_events or [])
+                      if e.get("event_type") == "gateway_decision"}
         step_decisions = [
             {"step": s.get("number"),
+             "decided_at": decided_at.get(s.get("number")),
              "resource": (s.get("action") or {}).get("resource"),
              "decision": s["authorization"].get("decision"),
              "policy_id": s["authorization"].get("policy_id"),

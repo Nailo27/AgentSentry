@@ -164,3 +164,29 @@ def test_events_record_every_step_decision():
     decision = next(e for e in events if e["event_type"] == "authorization_decision")
     assert [(d["step"], d["decision"]) for d in decision["step_decisions"]] == [(1, "DENY"), (2, "ALLOW")]
     assert decision["step_decisions"][0]["resource"] == "/restricted/payroll/payroll.csv"
+
+def test_step_decisions_carry_runtime_event_time():
+    """decided_at comes from the runtime's own gateway_decision event, not build time."""
+    request = {"scan_id": "S", "test_id": "T", "user": "employee01",
+               "role": "employee", "message": "m"}
+    result = {
+        "tool_request": {"resource": "/public/handbook.txt"},
+        "authorization": {"decision": "ALLOW", "policy_id": "POL-FILE-001"},
+        "agent_message": "ok", "stop_reason": "final",
+        "steps": [
+            {"number": 1, "action": {"type": "tool", "resource": "/public/handbook.txt"},
+             "authorization": {"decision": "ALLOW", "policy_id": "POL-FILE-001"}},
+            {"number": 2, "action": {"type": "final"}},
+        ],
+    }
+    runtime_events = [{"timestamp": "2026-01-01T00:00:01+00:00",
+                       "event_type": "gateway_decision", "number": 1,
+                       "decision": "ALLOW", "policy_id": "POL-FILE-001"}]
+    events = build_events(request, result, expected="ALLOW", runtime_events=runtime_events)
+    decision = next(e for e in events if e["event_type"] == "authorization_decision")
+    assert decision["step_decisions"][0]["decided_at"] == "2026-01-01T00:00:01+00:00"
+
+    # Without runtime events, the field is present but empty, not invented.
+    plain = build_events(request, result, expected="ALLOW")
+    plain_decision = next(e for e in plain if e["event_type"] == "authorization_decision")
+    assert plain_decision["step_decisions"][0]["decided_at"] is None
