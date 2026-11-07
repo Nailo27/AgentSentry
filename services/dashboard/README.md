@@ -40,6 +40,31 @@ On PowerShell set those with `$env:NAME = 'value'` first.
 | `RESULTS_DB` | `/evidence/results.db` | SQLite findings database on a named volume. |
 | `AGENT_TIMEOUT` | `600` | Seconds to wait for a bounded multi-turn model run. |
 
+## Page layout
+
+The Sprint 3 layout follows the user-testing report; the full mapping from each
+finding to each change is in
+[UI-01-sprint3-dashboard-changes.md](../../docs/infrastructure/UI-01-sprint3-dashboard-changes.md).
+
+The result of a run is split into four parts so each question has one place to
+look:
+
+| Part | Answers |
+|---|---|
+| Result banner and decision tiles | Did it pass? What did the policy say, and what did the gateway do? |
+| Why this result | The verdict in plain language, with technical notes collapsed underneath. |
+| Scenario / What happened | What was asked and by whom; every step the agent took and its reply. |
+| Evidence | The step-by-step trace and the JSONL evidence file for this exact run. |
+
+## Adding approved cases
+
+Add one entry to `APPROVED_CASES` in `app.py`, using the same fields as
+`BUILT_IN_SCENARIOS` (`test_id`, `title`, `user`, `role`, `message`, and the
+plain-language `summary`, `safe_result` and `expected_result`). No other code
+changes are needed. Each entry is checked against the permission matrix when
+the page loads; an invalid entry is listed in a warning and left out of the
+menu rather than scored against the wrong role.
+
 ## Model connection
 
 Select Rule-based baseline, OpenAI, Anthropic, or Ollama above the scenario
@@ -70,15 +95,18 @@ show an error/trace and do not create a PASS finding or reuse the previous resul
 
 | File | Purpose |
 |---|---|
-| `app.py` | Streamlit UI: scenario form, result panel, run trace, findings table. |
+| `app.py` | Streamlit UI: five numbered steps (choose a test, choose a model, review and run, result, past results). Also holds `APPROVED_CASES`. |
+| `explain.py` | Plain-language verdict explanations, hover-text glossary, scenario descriptions, approved-case validation, HTML escaping. |
+| `.streamlit/config.toml` | Fixed light theme and minimal toolbar. Copied into the image by the Dockerfile. |
 | `assessment.py` | Expected-vs-observed comparison, identity resolution, canary detection, verdict. |
 | `store.py` | SQLite schema and persistence. |
 | `evidence_export.py` | Emits a finding as a JSONL evidence trail in the LOG-01 event format. |
 | `model_connection.py` | Sends transient key headers and displays safe connection errors. |
 | `tests/test_assessment.py` | Verdict, policy, storage, and evidence checks; no running services required. |
 | `tests/test_model_connection.py` | Streamlit form, key clearing, error handling, and model metadata checks. |
+| `tests/test_presentation.py` | Explanations agree with every verdict rule; page layout, HTML escaping and approved-case validation. |
 
-`assessment.py` and `store.py` have no Streamlit dependency. That is
+`assessment.py`, `explain.py` and `store.py` have no Streamlit dependency. That is
 deliberate: Sprint 2's scanner should import them rather than reimplement the
 rules, and they can be unit-tested without starting a web server.
 
@@ -118,7 +146,9 @@ defined by LOG-01 on the `telemetry-tests` branch: five ordered events
 `final_response`, `verdict`), each carrying `timestamp`, `scan_id`, `test_id`
 and `event_type`.
 
-Download it from the "Evidence trail (JSONL)" panel under the latest result.
+Download it with "Download evidence file (JSONL)" in the Evidence card under
+the latest result. The file name includes the test ID and scan ID so it can be
+matched to the run it came from.
 
 The canary **value** is never written to the file — only a `canary_leaked`
 boolean — because the security policy requires logs to redact or minimise

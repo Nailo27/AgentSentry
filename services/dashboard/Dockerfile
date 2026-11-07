@@ -40,6 +40,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # modules and not tests/, which is a subdirectory.
 COPY *.py ./
 
+# Theme and client settings (Sprint 3). Streamlit reads .streamlit/config.toml
+# from the working directory. The *.py glob above does not match it, so
+# without this line the image would build cleanly and silently fall back to
+# the default theme.
+COPY .streamlit/ ./.streamlit/
+
 # Run unprivileged, matching the target agent's USER 65532:65532 (the
 # conventional "nonroot" uid). /evidence is created and handed to that uid here
 # because a volume mounted at a path the container user cannot write to fails

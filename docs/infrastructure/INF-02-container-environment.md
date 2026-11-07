@@ -168,20 +168,23 @@ target agent's existing `USER 65532:65532`.
 ## 7. The `GATEWAY_MODULE` switch
 
 ```yaml
-command: ["uvicorn", "${GATEWAY_MODULE:-demo_gateway:app}", ...]
+command: ["uvicorn", "${GATEWAY_MODULE:-gateway.app:app}", ...]
 ```
 
 The gateway service runs whichever module `GATEWAY_MODULE` names:
 
-* `demo_gateway:app` *(default)* — the interim gateway that ships on the
-  target-agent branch. Works today, so the lab is runnable now.
-* `gateway.app:app` — the real GW-01 gateway, once that branch merges and the
-  three blocking defects in `docs/integration/gateway-integration-notes.md`
-  are fixed.
+* `gateway.app:app` *(default since Sprint 3)* — the shared GW-01 gateway in
+  `services/target-agent/gateway/`. The Sprint 1 defects recorded in
+  `docs/integration/gateway-integration-notes.md` were fixed during Sprint 2
+  integration, and this is the configuration the team's evidence and
+  adversarial cases are produced against.
+* `demo_gateway:app` — the interim Sprint 1 gateway. Kept only for comparing
+  against older evidence.
 
-This was a deliberate choice: INF-02 should not be blocked waiting on GW-01,
-and GW-01 should not be rushed to unblock INF-02. Switching is a one-line `.env`
-change, not a compose rewrite.
+The switch was introduced so INF-02 was not blocked waiting on GW-01. It stays
+because older evidence was produced against the interim gateway and may need
+to be reproduced. A `.env` created before Sprint 3 still selects the interim
+gateway and overrides the default; BUILD.md shows how to check.
 
 ---
 

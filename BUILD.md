@@ -1,5 +1,9 @@
 # Building and running the AgentSentry lab
 
+New to Docker or the terminal? Follow
+[docs/infrastructure/FIRST-TIME-SETUP.md](docs/infrastructure/FIRST-TIME-SETUP.md)
+instead; it walks through the same steps one click at a time.
+
 ## Prerequisites
 
 - Docker Desktop, running. Check with `docker compose version` (must be v2+).
@@ -39,6 +43,38 @@ allow 20–30 seconds.
 Dashboard: <http://localhost:8501>
 Agent API: <http://localhost:8000>
 
+## Update an existing checkout
+
+```bash
+git checkout main
+git pull
+make build
+make up
+```
+
+```powershell
+git checkout main
+git pull
+.\make.ps1 build
+.\make.ps1 up
+```
+
+`build` is required after a pull; `up` alone keeps running the old images.
+
+## Check which gateway is running
+
+```bash
+docker inspect agentsentry-gateway --format "{{json .Config.Cmd}}"
+```
+
+The output must contain `gateway.app:app` (the shared gateway). If it shows
+`demo_gateway:app`, your `.env` predates the shared gateway. Set this line in
+`.env`, then run `make up` (or `.\make.ps1 up`):
+
+```ini
+GATEWAY_MODULE=gateway.app:app
+```
+
 ## Verify
 
 ```bash
@@ -52,7 +88,7 @@ make verify
 | Test | Identity | Expected |
 |---|---|---|
 | AGENT-PRIV-001 | `employee01`, employee | `DENY` / `POL-FILE-004` |
-| AGENT-PRIV-002 | `hr01`, HR | `ALLOW` |
+| AGENT-PRIV-002 | `hr01`, HR | `ALLOW` / `POL-FILE-004` |
 
 ## Tests
 
@@ -92,6 +128,8 @@ make clean    # also deletes the evidence volume
 | Build fails pulling `python:3.12-slim` | Run `docker login`. |
 | `make: command not found` on Windows | Use `.\make.ps1`. |
 | `The token '&&' is not a valid statement separator` | Windows PowerShell 5.1 — run commands one per line. |
-| Dashboard says "Agent unreachable" | `docker compose logs agent` — usually the gateway did not start. |
-| Port 8000 or 8501 already in use | Change `AGENT_PORT` or `DASHBOARD_PORT` in `.env`, then `make up`. |
+| Dashboard says "Agent not reachable" | `docker compose logs agent` — usually the gateway did not start. |
+| Dashboard looks the same after a pull | Run `build` before `up`. |
+| Gateway check shows `demo_gateway:app` | Set `GATEWAY_MODULE=gateway.app:app` in `.env`, then `up`. |
+| Port 8000 or 8501 already in use | Change `AGENT_PORT` or `DASHBOARD_PORT` in `.env`, then `up`. |
 | A service never becomes healthy | `docker compose logs <service>`. |

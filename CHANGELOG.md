@@ -10,6 +10,40 @@ changes can change assessment results.
 
 ## [Unreleased]
 
+### Sprint 3 — UI-01 dashboard presentation and INF-02 build alignment
+
+- **UI-01** — Dashboard layout rebuilt from the Sprint 3 user-testing report.
+  Sidebar removed; agent status and policy details moved into the page, with
+  rarely needed details in a collapsed "Lab details" panel. Sections are
+  numbered steps on separate white cards over a grey page background. A
+  full-width coloured result banner replaces the small badge. Security terms
+  carry an "i" hover explanation instead of on-page descriptions. Mapping from
+  each finding to each change: `docs/infrastructure/UI-01-sprint3-dashboard-changes.md`.
+- **UI-01** — Each result now shows the scenario, the observed behaviour (every
+  step, in plain sentences), a plain-language verdict explanation and the
+  evidence for that exact run, identified by test ID and scan ID.
+- **UI-01** — `services/dashboard/explain.py`: plain-language wording, glossary
+  and case validation, with no Streamlit dependency. A test runs every verdict
+  rule through both `assessment.assess()` and the explanation and fails if they
+  disagree, so the wording cannot drift from the logic.
+- **UI-01** — `APPROVED_CASES` in `app.py` for the cases to be added with Caleb.
+  Entries are validated against the permission matrix on load; invalid ones are
+  reported and left out of the menu.
+- **INF-02** — Lab now defaults to the shared GW-01 gateway
+  (`GATEWAY_MODULE=gateway.app:app`) in both `compose.yaml` and `.env.example`.
+  An existing `.env` overrides the default, so `BUILD.md` shows how to check
+  which gateway is running.
+- **INF-02** — `BUILD.md` updated for the integrated checkout (update steps,
+  gateway check, new troubleshooting rows). `docs/infrastructure/BUILD.md`,
+  which described the Sprint 1 unmerged-branch build, replaced with a pointer.
+  Added `docs/infrastructure/FIRST-TIME-SETUP.md` for testers with no terminal
+  experience, as recommended by the user-testing report.
+- **Security** — All text placed in dashboard HTML (test IDs, scan IDs, user
+  names, messages, agent replies) is now escaped. The Sprint 1 badges
+  interpolated these values unescaped.
+- Dashboard requires Streamlit 1.50 or later (keyed containers and the `width`
+  argument that replaces the deprecated `use_container_width`).
+
 ### Added
 
 - Created the initial project folder structure.

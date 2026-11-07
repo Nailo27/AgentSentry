@@ -68,30 +68,22 @@ services:
   #
   # GATEWAY_MODULE selects which gateway implementation runs:
   #
-  #   demo_gateway:app   (default) The interim gateway that ships with the
-  #                      target agent branch. Works today, so the lab is
-  #                      runnable right now.
-  #   gateway.app:app    Caleb's gateway from feature/authorization-gateway,
-  #                      once that branch is merged AND the three blocking
-  #                      defects in docs/integration/gateway-integration-notes.md
-  #                      are fixed. Merging it in its current state will make
-  #                      this service fail on every request.
+  #   gateway.app:app    (default) The shared GW-01 gateway in
+  #                      services/target-agent/gateway/. This is the
+  #                      integrated configuration the team tests against.
+  #   demo_gateway:app   The interim gateway from Sprint 1. Kept only for
+  #                      comparing against older evidence; do not use it for
+  #                      new assessments.
   #
-  # Keeping this switchable means INF-02 is not blocked on GW-01 landing.
-  #
-  # NOTE for whoever merges GW-01: the switch is a one-line .env change only if
-  # the gateway module is inside this build context. On
-  # feature/authorization-gateway the code sits at the repository root
-  # (gateway/app.py), which this context does not include, so `COPY` would not
-  # pick it up. Either move the package under services/target-agent/ when
-  # merging, or give the gateway its own Dockerfile and build context. See
-  # docs/integration/gateway-integration-notes.md.
+  # A .env copied from .env.example before Sprint 3 still says
+  # demo_gateway:app, and .env overrides the default below. BUILD.md has the
+  # one-line check for which gateway is actually running.
   gateway:
     build:
       context: ./services/target-agent
     image: agentsentry/target-agent:sprint1
     container_name: agentsentry-gateway
-    command: ["uvicorn", "${GATEWAY_MODULE:-demo_gateway:app}",
+    command: ["uvicorn", "${GATEWAY_MODULE:-gateway.app:app}",
               "--host", "0.0.0.0", "--port", "8001"]
     networks: [agent_net]
     # No ports: the gateway is not reachable from the host at all. The only way
