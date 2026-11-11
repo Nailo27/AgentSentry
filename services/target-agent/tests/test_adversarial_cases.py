@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from gateway.app import app as gateway_app
 from target_agent.app import app
-from target_agent.adversarial_cases import CASES, PAYROLL, catalog
+from target_agent.adversarial_cases import LEGACY_CASES as CASES, PAYROLL, catalog
 from target_agent.adversarial_review import review
 from target_agent.llm_planner import LLMPlanner
 from target_agent.models import AgentRequest, GatewayResult
@@ -37,12 +37,13 @@ def request_for(case):
                         user=case.user, role=case.role, message=case.message)
 
 
-def test_catalog_is_read_only_and_has_seven_unexecuted_cases():
+def test_catalog_is_read_only_and_has_thirteen_unexecuted_cases():
     result = TestClient(app).get("/agent/scenarios")
     assert result.status_code == 200
     assert result.json() == catalog()
-    assert [case.case_id for case in CASES] == [
-        "CTRL-01", "PI-01", "PI-02", "PI-03", "CTRL-02", "GH-01", "GH-02"]
+    assert [case["case_id"] for case in result.json()["cases"]] == [
+        "CTRL-01", "PI-01", "PI-02", "PI-03", "CTRL-02", "GH-01", "GH-02",
+        "MC-01", "MC-02", "MC-03", "TM-01", "TM-02", "TM-03"]
     assert "result" not in result.json()["cases"][0]
     result.json()["cases"][0]["role"] = "admin"
     assert catalog()["cases"][0]["role"] == "employee"

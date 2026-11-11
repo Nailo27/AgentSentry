@@ -12,7 +12,7 @@ from .gateway import HttpGateway
 from .llm_planner import PlannerUnavailable
 from .models import AgentRequest, AgentResponse, FinalAction, ModelSettings
 from .runtime import AgentRuntime
-from .adversarial_cases import catalog
+from .adversarial_cases import catalog, find_case, unavailable_reason
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 app = FastAPI(title="AgentSentry Target Agent")
@@ -75,7 +75,12 @@ async def check_model(selection: ModelSettings, http_request: Request):
 
 @app.post("/agent/message", response_model=AgentResponse)
 async def message(request: AgentRequest, http_request: Request):
+    case = find_case(request.test_id)
+    if case and (reason := unavailable_reason(case)):
+        raise HTTPException(status_code=409, detail="Not run - " + reason)
     # A fresh planner prevents provider/key changes leaking into another run.
     planner, settings = connection(request.model_settings, http_request)
+    if case and (reason := unavailable_reason(case, settings.provider)):
+        raise HTTPException(status_code=409, detail="Not run - " + reason)
     response = await AgentRuntime(planner, HttpGateway()).run(request)
     return response.model_copy(update={"model_settings": settings})

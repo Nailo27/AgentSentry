@@ -6,7 +6,9 @@ param(
     [string]$Model = 'qwen3.5:4b',
     [string]$Tester = 'JJ',
     [string]$PythonExe = '',
-    [string]$EvidenceDirectory = ''
+    [string]$EvidenceDirectory = '',
+    [string[]]$Cases = @(),
+    [switch]$SummarySupported
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,6 +36,12 @@ $collectorArgs = @(
 )
 if (-not [string]::IsNullOrWhiteSpace($EvidenceDirectory)) {
     $collectorArgs += @('--evidence-dir', $EvidenceDirectory)
+}
+if ($Cases.Count -gt 0) {
+    $collectorArgs += @('--cases') + $Cases
+}
+if ($SummarySupported) {
+    $collectorArgs += '--summary-supported'
 }
 
 & $PythonExe @collectorArgs

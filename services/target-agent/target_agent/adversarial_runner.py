@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .adversarial_cases import CASES, PLAN_VERSION, catalog
+from .adversarial_cases import CASES, PLAN_SOURCE, PLAN_VERSION, catalog, unavailable_reason
 from .adversarial_review import review
 
 
@@ -65,7 +65,7 @@ def main(argv=None, *, root=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="List cases without contacting any service")
     parser.add_argument("--provider", choices=("rule", "ollama"), default="rule")
-    parser.add_argument("--model", default="qwen3:4b")
+    parser.add_argument("--model", default="qwen3.5:4b")
     parser.add_argument("--agent-url", default="http://127.0.0.1:8000")
     parser.add_argument("--cases", nargs="+", choices=[case.case_id for case in CASES])
     parser.add_argument("--timeout", type=float, default=600)
@@ -76,7 +76,9 @@ def main(argv=None, *, root=None):
     args = parser.parse_args(argv)
     if args.list:
         for case in CASES:
-            print(f"{case.case_id}: {case.title} (control: {case.control_id or 'none'})")
+            reason = unavailable_reason(case, args.provider)
+            suffix = f"; Not run - {reason}" if reason else ""
+            print(f"{case.case_id}: {case.title} (control: {case.control_id or 'none'}){suffix}")
         return 0
     # Resolve lazily: --list and an explicit --tester must not depend on an
     # account database entry for the unprivileged Docker UID (65532).
@@ -93,37 +95,47 @@ def main(argv=None, *, root=None):
     if args.provider == "rule" and args.summary_supported:
         parser.error("The rule-based planner does not support the summary control")
     base = args.agent_url.rstrip("/")
-    try:
-        remote = exchange(base, "/agent/scenarios", timeout=10)
-    except (HTTPError, URLError, OSError, ValueError):
-        print("Could not load the case catalog. Rebuild/start the updated agent and check its port.", file=sys.stderr)
-        return 1
-    if remote != catalog():
-        print("Agent and runner catalogs differ. Rebuild from the same checkout before running.", file=sys.stderr)
-        return 1
+    selected = [case for case in CASES if not args.cases or case.case_id in args.cases]
+    runnable = [case for case in selected if not unavailable_reason(case, args.provider)]
+    if runnable:
+        try:
+            remote = exchange(base, "/agent/scenarios", timeout=10)
+        except (HTTPError, URLError, OSError, ValueError):
+            print("Could not load the case catalog. Rebuild/start the updated agent and check its port.", file=sys.stderr)
+            return 1
+        if remote != catalog():
+            print("Agent and runner catalogs differ. Rebuild from the same checkout before running.", file=sys.stderr)
+            return 1
 
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y%m%dT%H%M%S%fZ")
     output = args.output / f"{stamp}-{args.provider}"
     output.mkdir(parents=True, exist_ok=False)
     policy = root / "docs/policies/permission_matrix.yaml"
+    plan = root / PLAN_SOURCE
     settings = {"provider": args.provider}
     if args.provider == "ollama":
         settings["model"] = args.model
-    selected = [case for case in CASES if not args.cases or case.case_id in args.cases]
     dirty_status = command(["git", "status", "--porcelain"], root)
     metadata = {
         "plan_version": PLAN_VERSION, "started_at": now.isoformat(), "tester": args.tester,
         "requested_model_settings": settings,
+        "selected_case_ids": [case.case_id for case in selected],
+        "runnable_case_ids": [case.case_id for case in runnable],
+        "not_run_case_ids": [case.case_id for case in selected if case not in runnable],
         "checkout_commit": command(["git", "rev-parse", "HEAD"], root),
         "checkout_dirty": None if dirty_status is None else bool(dirty_status),
         "permission_matrix_sha256": hashlib.sha256(policy.read_bytes()).hexdigest() if policy.exists() else None,
+        "test_plan_source": PLAN_SOURCE,
+        "test_plan_sha256": hashlib.sha256(plan.read_bytes()).hexdigest() if plan.exists() else None,
         "agent_image_id": command(["docker", "inspect", "--format", "{{.Image}}", "agentsentry-agent"], root),
         "gateway_image_id": command(["docker", "inspect", "--format", "{{.Image}}", "agentsentry-gateway"], root),
         "gateway_command": command(["docker", "inspect", "--format", "{{json .Config.Cmd}}", "agentsentry-gateway"], root),
         "summary_control_confirmed_by_tester": args.summary_supported,
         "limitations": ["Checkout and policy hashes describe local files, not proof of container source identity.",
                         "HTTP calls here are not recorded in the dashboard database.",
+                        "Memory cases are recorded Not run; no persistent memory fixture or inspection interface exists.",
+                        "Named Ollama model selection alone does not prove the wrapper preserved its standalone persona.",
                         "Model judgments require human control comparison; automated tests use no live model."],
     }
     save(output / "metadata.json", metadata)
@@ -135,8 +147,22 @@ def main(argv=None, *, root=None):
                 "user": case.user, "role": case.role, "message": case.message,
                 "model_settings": settings}
         record = {"plan_version": PLAN_VERSION, "case": case.__dict__, "request": body,
-                  "submitted_at": datetime.now(timezone.utc).isoformat(), "tester": args.tester,
+                  "submitted_at": None, "execution_attempted": False, "tester": args.tester,
                   "dashboard_finding_label": "Not recorded (direct API run)"}
+        reason = unavailable_reason(case, args.provider)
+        if reason:
+            # The request is retained as a plan, not sent to a model or gateway.
+            record.update(submission_result="Not run", not_run_reason=reason,
+                          review={"gateway_result": "Not run", "model_result": "Not run"})
+            row = {"case_id": case.case_id, "scan_id": body["scan_id"],
+                   "submission_result": "Not run", "gateway_result": "Not run",
+                   "model_result": "Not run", "not_run_reason": reason}
+            save(output / f"{case.case_id}.json", record)
+            summary[index] = row
+            save(output / "summary.json", summary)
+            print(f"{case.case_id}: Not run - {reason}", flush=True)
+            continue
+        record.update(submitted_at=datetime.now(timezone.utc).isoformat(), execution_attempted=True)
         try:
             response = exchange(base, "/agent/message", body, args.timeout)
             record["response"] = response
@@ -166,7 +192,8 @@ def main(argv=None, *, root=None):
     if any(row["submission_result"] == "Error" or "Fail" in
            (row["gateway_result"], row["model_result"]) for row in summary):
         return 1
-    if any("Inconclusive" in (row["gateway_result"], row["model_result"]) for row in summary):
+    if any(row["submission_result"] == "Not run" or
+           "Inconclusive" in (row["gateway_result"], row["model_result"]) for row in summary):
         return 2
     return 0
 

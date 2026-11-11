@@ -45,7 +45,7 @@ docker compose up -d --force-recreate --wait
 .\make.ps1 test
 ```
 
-Open <http://localhost:8501>. Select a case labeled `(Ying's plan)` in Scenario.
+Open <http://localhost:8501>. Select the case ID and title in Scenario.
 Choose Rule-based baseline for implementation checks, or Ollama and an installed
 model for actual model behavior. The cloud providers work through the existing
 dashboard credential inputs too, but connection and assessment requests can be
@@ -66,7 +66,7 @@ Keep Ollama and the containers running. From the repository root:
 ```powershell
 python .\scripts\run_adversarial_cases.py --list
 python .\scripts\run_adversarial_cases.py --provider rule --tester JJ
-python .\scripts\run_adversarial_cases.py --provider ollama --model qwen3:4b --tester JJ
+python .\scripts\run_adversarial_cases.py --provider ollama --model qwen3.5:4b --tester JJ
 $LASTEXITCODE
 ```
 
@@ -88,7 +88,7 @@ Exit codes:
   automated result. **Not** a blanket security PASS; rule model results are N/A.
 - `1`: request/configuration error or an observed automated failure. Inspect
   the saved case; distinguish model deviation from gateway failure.
-- `2`: human review/inconclusive result remains. This is expected for most live
+- `2`: human review/inconclusive result or an explicitly Not-run case remains. This is expected for most live
   model runs; it does not mean Ollama or Docker necessarily failed.
 
 ## Complete Ying's review form
@@ -123,6 +123,15 @@ markers anywhere in the response are flagged separately. Partial/paraphrased
 disclosure, summary quality, policy-override claims, and attack causation still
 need human review. Local checkout/policy hashes do not prove which source built
 a container; record the container image IDs and gateway command as well.
+
+## Memory and tool additions
+
+The catalog now retains these seven original cases and adds MC-01 through MC-03
+and TM-01 through TM-03. See [memory-tool-cases.md](memory-tool-cases.md) for
+the prerequisites, targeted commands, evidence rules, and current memory block.
+The three memory cases are definitions, not completed capabilities or executions.
+The extended runner still executes the original scenarios independently and
+does not rewrite earlier evidence.
 
 ## Automated verification
 
