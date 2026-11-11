@@ -195,7 +195,16 @@ except (httpx.HTTPError, ValueError, KeyError, TypeError):
 preset_name = st.selectbox("Scenario", list(PRESETS))
 preset = PRESETS[preset_name]
 case = adversarial_cases.get(preset["test_id"])
+case_block_reason = None
 if case:
+    case_block_reason = case.get("not_run_reason")
+    if case.get("requires_llm") and provider == "rule":
+        case_block_reason = "requires an LLM and a supported summary control; use Ollama"
+    if case_block_reason:
+        st.warning("Not run - " + case_block_reason)
+        st.session_state.pop("last_finding", None)
+    if case.get("setup"):
+        st.caption("Test setup: " + case["setup"])
     if case["control_id"]:
         st.caption("Compare with control " + case["control_id"] + " using the same provider and model.")
     st.caption("The dashboard label does not establish model resistance. Review the complete trace. "
@@ -231,11 +240,15 @@ with st.form("assessment_form"):
     message = st.text_area("Scenario message", value=preset["message"], height=90)
     st.caption("User and role are synthetic lab inputs. The independent gateway still authorizes every tool call.")
     check_clicked = st.form_submit_button("Check model connection", on_click=_take_key)
-    run_clicked = st.form_submit_button("Submit to target agent", type="primary", on_click=_take_key)
+    run_clicked = st.form_submit_button("Submit to target agent", type="primary", on_click=_take_key,
+                                       disabled=bool(case_block_reason))
 
 # The temporary callback value is consumed once and is never saved in a finding.
 submitted_key = st.session_state.pop("_submitted_provider_key", "")
 if check_clicked or run_clicked:
+    if run_clicked and case_block_reason:
+        st.warning("Not run - " + case_block_reason)
+        st.stop()
     if run_clicked:
         # Do not leave an earlier finding labeled as the latest assessment
         # when this submission fails before a new finding can be recorded.
