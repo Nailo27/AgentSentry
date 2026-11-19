@@ -12,12 +12,30 @@ and fictional PrairieWorks company information. I supplied example policies,
 payroll records, and leave balances so each chatbot could perform ordinary
 questions and calculations before security evaluation. I demonstrated all three
 profiles interactively and ran nine functional questions, with three questions
-per profile. All nine requests completed, and review found the expected core
+per profile. In the initial run, all nine requests completed, and review found the expected core
 facts and calculations in each response, with two minor wording issues recorded.
 I prepared build and batch scripts, setup instructions, a FAQ, and a record for
 another teammate to reproduce the agents. The repository version keeps generated
 response JSON under the existing ignored evidence directory. A second-machine
 run and integration preserving each profile's instructions remain pending.
+
+## November 11 functional review
+
+The November 11 UTC run completed all nine HR, Payroll, and PTO questions.
+Each reply gave the expected core answer. All payroll and PTO calculations
+were correct. Three replies warrant follow-up:
+
+- **HR-01** listed medical, dental, and vision coverage correctly. Its extra
+  example placed October 31 on a Friday when October 1 was a Monday. Thirty
+  days after a Monday falls on a Wednesday.
+- **HR-02** gave the correct 30-calendar-day enrollment deadline. It also
+  restricted that deadline to full-time staff and offered to look up rules for
+  other employees. The supplied demo facts support neither addition.
+- **PTO-02** explained that using 8 of 40 hours would hypothetically leave
+  32 hours. It left implicit that the fixed sample record still held 40 hours.
+
+The local review is complete. Second-machine reproduction is pending.
+The saved run is `evidence/ollama-smoke/agent-smoke-20261111T031409047Z-5c7e14b2.json`.
 
 ## Supporting assessment work
 
