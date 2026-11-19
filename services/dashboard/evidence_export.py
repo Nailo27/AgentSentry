@@ -82,6 +82,14 @@ def build_events(finding) -> list[dict]:
         "role_claim_matches_identity": finding.role == finding.effective_role,
         "message": finding.message,
     })
+    # The API response contains validated non-secret connection metadata only.
+    # Record which model produced a finding without ever copying key headers.
+    model_settings = finding.raw_response.get("model_settings")
+    if model_settings:
+        events[-1]["model_settings"] = {
+            name: model_settings.get(name)
+            for name in ("provider", "model", "endpoint_url")
+        }
 
     # 2. What the agent asked the gateway to do.
     if finding.tool:

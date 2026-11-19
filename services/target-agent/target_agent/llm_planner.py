@@ -7,6 +7,7 @@ import httpx
 from pydantic import ValidationError
 
 from .models import AgentRequest, FinalAction, Observation, ToolAction
+from .provider_endpoints import approved_endpoint
 
 
 class PlannerUnavailable(Exception):
@@ -52,13 +53,14 @@ class OpenAIResponsesAdapter:
     """An optional HTTPS adapter to the OpenAI Responses API."""
 
     def __init__(self, api_key: str | None = None, model: str | None = None,
-                 client: httpx.AsyncClient | None = None):
+                 client: httpx.AsyncClient | None = None, endpoint_url: str | None = None):
         """Read provider settings or accept injected values for isolated tests."""
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.model = model or os.getenv("OPENAI_MODEL")
         if not self.api_key or not self.model:
             raise ValueError("LLM mode requires OPENAI_API_KEY and OPENAI_MODEL")
         self.client = client
+        self.endpoint_url = approved_endpoint("openai", endpoint_url)
 
     async def generate_action(self, context: dict[str, Any]) -> dict[str, Any]:
         """Request a structured action from OpenAI's Responses API."""
@@ -75,11 +77,11 @@ class OpenAIResponsesAdapter:
         try:
             if self.client is None:
                 async with httpx.AsyncClient(timeout=20.0) as client:
-                    response = await client.post("https://api.openai.com/v1/responses", json=payload,
-                                                 headers={"Authorization": f"Bearer {self.api_key}"})
+                    response = await client.post(self.endpoint_url, json=payload,
+                                                 headers={"Authorization": f"Bearer {self.api_key}"}, follow_redirects=False)
             else:
-                response = await self.client.post("https://api.openai.com/v1/responses", json=payload,
-                                                  headers={"Authorization": f"Bearer {self.api_key}"})
+                response = await self.client.post(self.endpoint_url, json=payload,
+                                                  headers={"Authorization": f"Bearer {self.api_key}"}, follow_redirects=False)
             response.raise_for_status()
             body = response.json()
             # Refusals, truncation, and unexpected content are not executable actions.
@@ -102,13 +104,14 @@ class AnthropicAdapter:
     """Claude Messages API adapter using schema-constrained JSON output."""
 
     def __init__(self, api_key: str | None = None, model: str | None = None,
-                 client: httpx.AsyncClient | None = None):
+                 client: httpx.AsyncClient | None = None, endpoint_url: str | None = None):
         """Read Claude settings or inject an HTTP client for contract tests."""
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         self.model = model or os.getenv("ANTHROPIC_MODEL")
         if not self.api_key or not self.model:
             raise ValueError("Anthropic mode requires ANTHROPIC_API_KEY and ANTHROPIC_MODEL")
         self.client = client
+        self.endpoint_url = approved_endpoint("anthropic", endpoint_url)
 
     async def generate_action(self, context: dict[str, Any]) -> dict[str, Any]:
         """Request one JSON action via the Claude Messages API."""
@@ -125,11 +128,11 @@ class AnthropicAdapter:
         try:
             if self.client is None:
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.post("https://api.anthropic.com/v1/messages",
-                                                 json=payload, headers=headers)
+                    response = await client.post(self.endpoint_url,
+                                                 json=payload, headers=headers, follow_redirects=False)
             else:
-                response = await self.client.post("https://api.anthropic.com/v1/messages",
-                                                  json=payload, headers=headers)
+                response = await self.client.post(self.endpoint_url,
+                                                  json=payload, headers=headers, follow_redirects=False)
             response.raise_for_status()
             body = response.json()
             # A max-token stop may contain incomplete JSON, so reject it.
@@ -170,9 +173,9 @@ class OllamaAdapter:
         try:
             if self.client is None:
                 async with httpx.AsyncClient(timeout=120.0) as client:
-                    response = await client.post(f"{self.base_url}/api/chat", json=payload)
+                    response = await client.post(f"{self.base_url}/api/chat", json=payload, follow_redirects=False)
             else:
-                response = await self.client.post(f"{self.base_url}/api/chat", json=payload)
+                response = await self.client.post(f"{self.base_url}/api/chat", json=payload, follow_redirects=False)
             response.raise_for_status()
             body = response.json()
             # A partial stream or missing assistant message cannot authorize a tool.

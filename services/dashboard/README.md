@@ -38,7 +38,33 @@ On PowerShell set those with `$env:NAME = 'value'` first.
 | `TARGET_AGENT_URL` | `http://agent:8000` | The agent's base URL. |
 | `PERMISSION_MATRIX` | `/app/policy/permission_matrix.yaml` | Policy ground truth, mounted read-only. |
 | `RESULTS_DB` | `/evidence/results.db` | SQLite findings database on a named volume. |
-| `AGENT_TIMEOUT` | `30` | Seconds to wait for an agent response. |
+| `AGENT_TIMEOUT` | `600` | Seconds to wait for a bounded multi-turn model run. |
+
+## Model connection
+
+Select Rule-based baseline, OpenAI, Anthropic, or Ollama above the scenario
+form. Cloud providers require a supported model ID and either a personal API
+key or a server-configured key. The masked key field is cleared before each
+network submission, even if that submission fails. Changing providers also
+clears the key, so an OpenAI key cannot follow a switch to Anthropic.
+
+OpenAI and Anthropic have an editable API endpoint URL field, prefilled with
+the official API URL. A custom HTTPS endpoint must first be listed in the
+agent's provider-specific `OPENAI_ALLOWED_ENDPOINTS` or
+`ANTHROPIC_ALLOWED_ENDPOINTS`. URLs are matched exactly; credentials, queries,
+fragments, and redirects are not accepted. Only approve trusted proxies that
+implement the adapter's Responses or Messages API format. Ollama's URL remains
+read-only and comes from the agent's `OLLAMA_BASE_URL`.
+
+See [editable provider endpoints](../../docs/integration/editable-provider-endpoints.md)
+for operator configuration and the follow-up patch instructions.
+
+Check model connection makes one small model request and can incur cloud API
+charges. It does not create a security verdict. Enter the personal key again
+before running an assessment, or leave it blank to use a server-configured key.
+Provider and model are included in a completed finding and its JSONL export.
+API-key headers are never written to either. Failed or incomplete assessments
+show an error/trace and do not create a PASS finding or reuse the previous result.
 
 ## Files
 
@@ -48,7 +74,9 @@ On PowerShell set those with `$env:NAME = 'value'` first.
 | `assessment.py` | Expected-vs-observed comparison, identity resolution, canary detection, verdict. |
 | `store.py` | SQLite schema and persistence. |
 | `evidence_export.py` | Emits a finding as a JSONL evidence trail in the LOG-01 event format. |
-| `tests/test_assessment.py` | 28 unit tests; no running services required. |
+| `model_connection.py` | Sends transient key headers and displays safe connection errors. |
+| `tests/test_assessment.py` | Verdict, policy, storage, and evidence checks; no running services required. |
+| `tests/test_model_connection.py` | Streamlit form, key clearing, error handling, and model metadata checks. |
 
 `assessment.py` and `store.py` have no Streamlit dependency. That is
 deliberate: Sprint 2's scanner should import them rather than reimplement the
@@ -106,9 +134,9 @@ when output is redirected to a file.
 make test-dashboard          # or:  .\make.ps1 test-dashboard
 ```
 
-28 tests covering matrix lookup, identity resolution, every verdict rule and
-the evidence contract. They import the modules directly and need no services
-running.
+Tests cover matrix lookup, identity resolution, verdict rules, the evidence
+contract, and provider-selection form interactions. Streamlit tests use mocked
+HTTP; no running services or real API keys are required.
 
 ## Limitations
 

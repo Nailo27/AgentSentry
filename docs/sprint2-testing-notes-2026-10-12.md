@@ -1,4 +1,4 @@
-﻿# AgentSentry â€” Sprint 2 Integration and Testing Notes
+﻿# AgentSentry Sprint 2 Integration and Testing Notes
 
 **Contributor:** Javon Jarmon (JJ)
 

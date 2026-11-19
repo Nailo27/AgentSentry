@@ -1,0 +1,106 @@
+{
+  "package_version": "1.0",
+  "base_model": "qwen3.5:4b",
+  "scope": "Standalone conversational Ollama profiles with fixed synthetic context; no external tools or guardrail implementation.",
+  "profiles": [
+    {
+      "id": "hr",
+      "model": "agentsentry-hr:v1",
+      "file": "HR.Modelfile",
+      "purpose": "Answer fictional handbook, benefits, onboarding, and HR contact questions."
+    },
+    {
+      "id": "payroll",
+      "model": "agentsentry-payroll:v1",
+      "file": "Payroll.Modelfile",
+      "purpose": "Explain demo payroll policy and calculate illustrative pay from fictional records."
+    },
+    {
+      "id": "pto",
+      "model": "agentsentry-pto:v1",
+      "file": "PTO.Modelfile",
+      "purpose": "Explain demo leave rules, report fictional balances, and calculate hypothetical leave usage."
+    }
+  ],
+  "smoke_cases": [
+    {
+      "case_id": "HR-01",
+      "model": "agentsentry-hr:v1",
+      "question": "What benefits does PrairieWorks offer full-time employees?",
+      "expected_facts_for_human_review": [
+        "medical",
+        "dental",
+        "vision"
+      ]
+    },
+    {
+      "case_id": "HR-02",
+      "model": "agentsentry-hr:v1",
+      "question": "How long do new employees have to select benefits?",
+      "expected_facts_for_human_review": [
+        "30 calendar days"
+      ]
+    },
+    {
+      "case_id": "HR-03",
+      "model": "agentsentry-hr:v1",
+      "question": "Who should I contact about a missing paycheck?",
+      "expected_facts_for_human_review": [
+        "payroll@prairieworks.example"
+      ]
+    },
+    {
+      "case_id": "PAY-01",
+      "model": "agentsentry-payroll:v1",
+      "question": "How often are employees paid, and when are timesheets due?",
+      "expected_facts_for_human_review": [
+        "every other Friday",
+        "Tuesday",
+        "5:00 p.m."
+      ]
+    },
+    {
+      "case_id": "PAY-02",
+      "model": "agentsentry-payroll:v1",
+      "question": "Calculate gross pay for DEMO-001. Show the calculation.",
+      "expected_facts_for_human_review": [
+        "$25.00 x 80 = $2,000.00"
+      ]
+    },
+    {
+      "case_id": "PAY-03",
+      "model": "agentsentry-payroll:v1",
+      "question": "Calculate gross and net pay for DEMO-002 using the supplied deductions.",
+      "expected_facts_for_human_review": [
+        "gross $1,620.00",
+        "deductions $240.00",
+        "net $1,380.00"
+      ]
+    },
+    {
+      "case_id": "PTO-01",
+      "model": "agentsentry-pto:v1",
+      "question": "What is the provided PTO balance for DEMO-001?",
+      "expected_facts_for_human_review": [
+        "40 hours"
+      ]
+    },
+    {
+      "case_id": "PTO-02",
+      "model": "agentsentry-pto:v1",
+      "question": "If DEMO-001 hypothetically uses 8 hours from the provided balance, how many remain?",
+      "expected_facts_for_human_review": [
+        "40 - 8 = 32 hours",
+        "hypothetical; no record changed"
+      ]
+    },
+    {
+      "case_id": "PTO-03",
+      "model": "agentsentry-pto:v1",
+      "question": "How many PTO hours accrue over three completed biweekly pay periods?",
+      "expected_facts_for_human_review": [
+        "4 x 3 = 12 hours"
+      ]
+    }
+  ]
+}
