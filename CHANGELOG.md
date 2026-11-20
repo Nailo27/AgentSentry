@@ -10,6 +10,62 @@ changes can change assessment results.
 
 ## [Unreleased]
 
+### Sprint 4 — UI-01 presentation fixes from follow-up user testing
+
+- **UI-01** — "Usually scores" now shows PASS / WARNING / FAIL as a solid
+  badge (`explain.result_badge`), the same style as the result banner and the
+  history table, instead of coloured text.
+- **UI-01** — Hover bubbles have a black border. The page's own "i" bubbles
+  are now drawn with CSS instead of the browser's `title` tooltip, which
+  cannot be styled, and they open on keyboard focus as well as hover.
+- **UI-01** — One style for every info icon and bubble. Streamlit's field-help
+  "?" icons and bubbles are restyled to match the page's "i" icons and bubbles,
+  using shared CSS variables. Verified on Streamlit 1.50 and the current 1.x
+  release, whose help-icon markup differs. Bubbles in the right-hand column
+  open leftwards, and on phone-width screens they sit across the bottom of the
+  screen, so none open off screen.
+- **UI-01** — Team logo replaces the shield emoji in the page header and the
+  browser tab (`services/dashboard/assets/agentsentry-logo.png`, copied into
+  the image by the Dockerfile).
+- Merged current `main` into the dashboard branch. The memory and tool case
+  prerequisite checks added on `main` (cases that cannot run are shown with a
+  "Not run" warning and a disabled Submit button) were carried into the new
+  layout; their tests pass unmodified.
+
+### Sprint 3 — UI-01 dashboard presentation and INF-02 build alignment
+
+- **UI-01** — Dashboard layout rebuilt from the Sprint 3 user-testing report.
+  Sidebar removed; agent status and policy details moved into the page, with
+  rarely needed details in a collapsed "Lab details" panel. Sections are
+  numbered steps on separate white cards over a grey page background. A
+  full-width coloured result banner replaces the small badge. Security terms
+  carry an "i" hover explanation instead of on-page descriptions. Mapping from
+  each finding to each change: `docs/infrastructure/UI-01-sprint3-dashboard-changes.md`.
+- **UI-01** — Each result now shows the scenario, the observed behaviour (every
+  step, in plain sentences), a plain-language verdict explanation and the
+  evidence for that exact run, identified by test ID and scan ID.
+- **UI-01** — `services/dashboard/explain.py`: plain-language wording, glossary
+  and case validation, with no Streamlit dependency. A test runs every verdict
+  rule through both `assessment.assess()` and the explanation and fails if they
+  disagree, so the wording cannot drift from the logic.
+- **UI-01** — `APPROVED_CASES` in `app.py` for the cases to be added with Caleb.
+  Entries are validated against the permission matrix on load; invalid ones are
+  reported and left out of the menu.
+- **INF-02** — Lab now defaults to the shared GW-01 gateway
+  (`GATEWAY_MODULE=gateway.app:app`) in both `compose.yaml` and `.env.example`.
+  An existing `.env` overrides the default, so `BUILD.md` shows how to check
+  which gateway is running.
+- **INF-02** — `BUILD.md` updated for the integrated checkout (update steps,
+  gateway check, new troubleshooting rows). `docs/infrastructure/BUILD.md`,
+  which described the Sprint 1 unmerged-branch build, replaced with a pointer.
+  Added `docs/infrastructure/FIRST-TIME-SETUP.md` for testers with no terminal
+  experience, as recommended by the user-testing report.
+- **Security** — All text placed in dashboard HTML (test IDs, scan IDs, user
+  names, messages, agent replies) is now escaped. The Sprint 1 badges
+  interpolated these values unescaped.
+- Dashboard requires Streamlit 1.50 or later (keyed containers and the `width`
+  argument that replaces the deprecated `use_container_width`).
+
 ### Added
 
 - Created the initial project folder structure.

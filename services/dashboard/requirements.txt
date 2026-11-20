@@ -9,7 +9,10 @@
 # technology; httpx matches the client the target agent already uses, so the
 # two services share one HTTP stack rather than mixing httpx and requests.
 
-streamlit>=1.40,<2
+# 1.50 is the oldest release verified with the Sprint 3 layout (keyed
+# containers for the card styling, and width= in place of the deprecated
+# use_container_width).
+streamlit>=1.50,<2
 httpx>=0.27,<1
 pandas>=2.2,<3
 PyYAML>=6,<7

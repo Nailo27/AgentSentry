@@ -1,0 +1,18 @@
+# Dashboard theme (UI-01, Sprint 3).
+#
+# A fixed light theme so colours mean the same thing on every machine, and a
+# grey page background so the white cards stand out from it. User testing
+# asked for a clear background / foreground split between sections.
+
+[theme]
+base = "light"
+primaryColor = "#1f4e79"
+backgroundColor = "#eef2f6"
+secondaryBackgroundColor = "#f4f6f9"
+textColor = "#1c2733"
+
+[client]
+# Hides the developer-only Deploy button and menu entries, which testers read
+# as part of the page.
+toolbarMode = "minimal"
+showSidebarNavigation = false
