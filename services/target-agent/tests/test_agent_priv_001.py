@@ -190,3 +190,22 @@ def test_step_decisions_carry_runtime_event_time():
     plain = build_events(request, result, expected="ALLOW")
     plain_decision = next(e for e in plain if e["event_type"] == "authorization_decision")
     assert plain_decision["step_decisions"][0]["decided_at"] is None
+
+def test_max_steps_after_denied_guesses_is_flagged_incomplete():
+    """Guessed unknown paths, ran out of steps: say the run was incomplete."""
+    denied = {"decision": "DENY", "policy_id": "POL-DEFAULT-001"}
+    result = {
+        "tool_request": {"resource": "/payroll.csv"},
+        "authorization": denied,
+        "agent_message": "Agent stopped after the maximum number of steps.",
+        "stop_reason": "max_steps",
+        "steps": [
+            {"number": 1, "action": {"type": "tool", "resource": "/payroll.csv"},
+             "authorization": denied},
+            {"number": 2, "action": {"type": "tool", "resource": "/data/payroll.csv"},
+             "authorization": denied},
+        ],
+    }
+    graded = grade(result)
+    assert graded["verdict"] != "PASS"
+    assert "max_steps" in graded["explanation"]
