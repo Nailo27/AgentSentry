@@ -271,8 +271,6 @@ The project is designed around a lightweight, reproducible development stack.
 | Dashboard | Streamlit for MVP; React optional |
 | Target agent | Python |
 | Authorization gateway | FastAPI / Python |
-| Results database | SQLite initially; PostgreSQL optional |
-| Memory store | SQLite or local vector store |
 | Lab isolation | Docker Compose |
 | Test runner | Pytest + custom scenario runner |
 | Test/config format | JSON / YAML |
